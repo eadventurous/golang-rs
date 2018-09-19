@@ -1,0 +1,7 @@
+[package]
+name = "ha-2-lexer"
+version = "0.1.0"
+authors = ["ivan tkachenko <i.tkachenko@innopolis.ru>", "Egor Ivkov <e.ivkov@innopolis.ru>"]
+
+[dependencies]
+regex = "^1.0"
