@@ -64,10 +64,10 @@ impl<'a, T> Lexer<'a, T>
                 .filter_map(|&(ref regex, ref f)| {
                     regex
                         .captures(source)
-                        .map(|m| (m, f))
+                        .map(|c| (c, f))
                 }) // type: Iterator<Item=(Captures<'a>, &Box<TokenFactory<T>>)>
                 // apply token factory to the captures object
-                .map(|(m, f)| (m.get(0).unwrap().as_str().len(), f.token(m)))
+                .map(|(c, f)| (c.get(0).unwrap().as_str().len(), f.token(c)))
                 // take the first one that matches
                 .next()
                 // early return `Err` if empty

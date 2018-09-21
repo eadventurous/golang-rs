@@ -13,19 +13,19 @@ pub trait Token<'a>: Ord + Debug + Sized {
 
 pub trait TokenFactory<'a, T> where T: Token<'a>
 {
-    fn token(&self, m: Captures<'a>) -> T;
+    fn token(&self, c: Captures<'a>) -> T;
 }
 
 /// ```rust
 /// let factory_comma = |_| Tok::Comma;
-/// let factory_ident = |m| Tok::Ident(m.as_str());
+/// let factory_ident = |c| Tok::Ident(c.as_str());
 /// ```
 impl<'a, T, F> TokenFactory<'a, T> for F
     where
         T: Token<'a>,
         F: Fn(Captures<'a>) -> T {
-    fn token(&self, m: Captures<'a>) -> T {
-        self(m)
+    fn token(&self, c: Captures<'a>) -> T {
+        self(c)
     }
 }
 //

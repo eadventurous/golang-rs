@@ -119,7 +119,7 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
     let constant = |x| { move |_| x };
     LexerBuilder::new()
         .add(r"-", constant(Operator(GoOperator::Dec)))
-        .add(r"[^<>\[\],.+\-]+", |m| GoToken::Comment(m.get(0).unwrap().as_str()))
+        .add(r"[^<>\[\],.+\-]+", |c| GoToken::Comment(c.get(0).unwrap().as_str()))
         .build() 
 }
 
