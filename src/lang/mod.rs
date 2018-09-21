@@ -1,5 +1,5 @@
 use std::fmt::Debug;
-use regex::Match;
+use regex::Captures;
 
 pub mod brainfuck;
 pub mod golang;
@@ -13,7 +13,7 @@ pub trait Token<'a>: Ord + Debug + Sized {
 
 pub trait TokenFactory<'a, T> where T: Token<'a>
 {
-    fn token(&self, m: Match<'a>) -> T;
+    fn token(&self, m: Captures<'a>) -> T;
 }
 
 /// ```rust
@@ -23,8 +23,8 @@ pub trait TokenFactory<'a, T> where T: Token<'a>
 impl<'a, T, F> TokenFactory<'a, T> for F
     where
         T: Token<'a>,
-        F: Fn(Match<'a>) -> T {
-    fn token(&self, m: Match<'a>) -> T {
+        F: Fn(Captures<'a>) -> T {
+    fn token(&self, m: Captures<'a>) -> T {
         self(m)
     }
 }

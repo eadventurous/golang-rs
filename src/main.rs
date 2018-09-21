@@ -9,7 +9,7 @@ mod lang;
 use lang::{Token, TokenFactory};
 
 use regex::Regex;
-use regex::Match;
+use regex::Captures;
 
 pub struct LexerBuilder<'a, T> {
     pairs: Vec<(Regex, Box<TokenFactory<'a, T>>)>
@@ -24,7 +24,7 @@ impl<'a, T> LexerBuilder<'a, T>
 
     /// Shortcut for `add_pair`.
     pub fn add<F>(self, regex: &str, factory: F) -> Self
-        where F: Fn(Match<'a>) -> T + 'static
+        where F: Fn(Captures<'a>) -> T + 'static
     {
         assert!(regex.len() > 0);
 
@@ -58,21 +58,20 @@ impl<'a, T> Lexer<'a, T>
     where T: Token<'a>
 {
     pub fn next(&self, source: &'a str) -> Result<(&'a str, T), ()> {
-        let (m, token) =
+        let (len, token) =
             self.pairs.iter()
                 // apply regex AND skip mismatches in one shot
                 .filter_map(|&(ref regex, ref f)| {
                     regex
-                        .find_at(source, 0)
+                        .captures(source)
                         .map(|m| (m, f))
-                }) // type: Iterator<Item=(Match<'a>, &Box<TokenFactory<T>>)>
-                // apply token factory to the match object
-                .map(|(m, ref f)| (m, f.token(m)))
+                }) // type: Iterator<Item=(Captures<'a>, &Box<TokenFactory<T>>)>
+                // apply token factory to the captures object
+                .map(|(m, f)| (m.get(0).unwrap().as_str().len(), f.token(m)))
                 // take the first one that matches
                 .next()
                 // early return `Err` if empty
                 .ok_or(())?;
-        let len = m.as_str().len();
         let rest = &source[len..];
         Ok((rest, token))
     }

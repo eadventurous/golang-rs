@@ -31,7 +31,7 @@ pub fn make_lexer<'a>() -> Lexer<'a, BfToken<'a>> {
         .add(r"\.", constant(BfToken::Output))
         .add(r"\+", constant(BfToken::Inc))
         .add(r"-", constant(BfToken::Dec))
-        .add(r"[^<>\[\],.+\-]+", |m| BfToken::Comment(m.as_str()))
+        .add(r"[^<>\[\],.+\-]+", |m| BfToken::Comment(m.get(0).unwrap().as_str()))
         .build()
 }
 

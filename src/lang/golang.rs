@@ -1,21 +1,24 @@
 use super::{Token, TokenFactory};
+use ::{Lexer, LexerBuilder};
+use regex::Match;
+pub use self::GoToken::*;
 
-
-#[derive(Ord, PartialOrd, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub enum GoToken<'a> {
     /// identifiers
     Ident(&'a str),
     /// keywords
     Keyword(GoKeyword),
     /// operators and punctuation,
-    Operator(),
+    Operator(GoOperator),
     // literals
-    Literal(GoLiteral<'a>)
+    Literal(GoLiteral<'a>),
     // White space
+    Comment(&'a str),
 }
 
 /// Go programming language keywords
-#[derive(Ord, PartialOrd, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub enum GoKeyword {
     Break,
     Default,
@@ -44,15 +47,80 @@ pub enum GoKeyword {
     Var,
 }
 
-#[derive(Ord, PartialOrd, Eq, PartialEq, Debug)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
+pub enum GoOperator {
+    Add,
+    Sub,
+    Mul,
+    Quo,
+    Rem,
+    
+    And,
+    Or,
+    Xor,
+    Shl,
+    Shr,
+    AndNot,
+
+    AddAssign,
+    SubAssign,
+    QuoAssign,
+    RemAssign,
+    MulAssign,
+
+    AndAssign,
+    OrAssign,
+    XorAssign,
+    ShlAssign,
+    ShrAssign,
+    AndNotAssign,
+
+    LAnd,
+    LOr,
+    Arrow,
+    Inc,
+    Dec,
+
+    Eql,
+    Lss,
+    Gtr,
+    Assign,
+    Not,
+
+    NEq,
+    LEq,
+    GEq,
+    Define,
+    Ellipsis,
+
+    LParen,
+    LBrack,
+    LBrace,
+    Comma,
+    Period,
+
+    RParen,
+    RBrack,
+    RBrace,
+    Semicolon,
+    Colon,
+}
+
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub enum GoLiteral<'a> {
     String(&'a str),
     Integer(&'a str),
     Float(&'a str),
     Imaginary(&'a str),
     Rune(&'a str),
+}
 
-
+pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
+    let constant = |x| { move |_| x };
+    LexerBuilder::new()
+        .add(r"-", constant(Operator(GoOperator::Dec)))
+        .add(r"[^<>\[\],.+\-]+", |m| GoToken::Comment(m.get(0).unwrap().as_str()))
+        .build() 
 }
 
 
