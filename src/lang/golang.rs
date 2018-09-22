@@ -1,5 +1,5 @@
 use super::{Token, TokenFactory};
-use ::{Lexer, LexerBuilder};
+use ::{Lexer, LexerBuilder, token};
 use regex::Match;
 pub use self::GoToken::*;
 
@@ -54,7 +54,7 @@ pub enum GoOperator {
     Mul,
     Quo,
     Rem,
-    
+
     And,
     Or,
     Xor,
@@ -133,6 +133,23 @@ pub enum GoLiteral<'a> {
     Rune(&'a str),
 }
 
+fn is_whitespace(c: char) -> bool {
+    let c = c as u8;
+    return c == 0x20 // spaces (U+0020)
+        || c == 0x09 // horizontal tabs (U+0009)
+        || c == 0x0d // carriage returns (U+000D)
+        || c == 0x0a;// newlines (U+000A)
+}
+
+fn whitespace_filter(source: &str) -> &str {
+    for (i, c) in source.char_indices() {
+        if !is_whitespace(c) {
+            return &source[i..];
+        }
+    }
+    &source[source.len()..]
+}
+
 pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
     let constant = |x| { move |_| x };
 
@@ -202,6 +219,7 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
     "#;
 
     LexerBuilder::new()
+        .skip_whitespaces(whitespace_filter)
         .add(r"//.*$", |c| Comment(c.get(0).unwrap().as_str()))
         .add(r"/\*.*?\*/", |c| Comment(c.get(0).unwrap().as_str()))
 
@@ -329,7 +347,7 @@ impl<'a> Token<'a> for GoToken<'a> {
 mod test {
     use super::*;
     use ::engine;
-    
+
     #[test]
     fn test_id() {
         let lexer = make_lexer();
@@ -348,13 +366,13 @@ mod test {
             r".a",        // illegal: can't start with dot
         ];
         for id in valid_id.into_iter() {
-            assert_eq!(lexer.next(id).unwrap().1,
+            assert_eq!(token(lexer.next(id)),
                        GoToken::Ident(&id));
         }
         for id in illegal_id.into_iter() {
-            println!("{}", &id);
-            if !lexer.next(id).is_err() {
-                assert!(lexer.next(id).unwrap().1 != GoToken::Ident(&id));
+            match lexer.next(id) {
+                Some(Ok((_, GoToken::Ident(_)))) => panic!(),
+                _ => {}
             }
         }
     }
@@ -382,13 +400,13 @@ mod test {
             r"i",           //illegal: can't start with i
         ];
         for imaginary in valid_imaginary.into_iter() {
-            assert_eq!(lexer.next(imaginary).unwrap().1,
+            assert_eq!(token(lexer.next(imaginary)),
                        GoToken::Literal(GoLiteral::Imaginary(&imaginary)));
         }
         for imaginary in illegal_imaginary.into_iter() {
-            println!("{}", &imaginary);
-            if !lexer.next(imaginary).is_err() {
-                assert!(lexer.next(imaginary).unwrap().1 != GoToken::Literal(GoLiteral::Imaginary(&imaginary)));
+            match lexer.next(imaginary) {
+                Some(Ok((_, GoToken::Literal(GoLiteral::Imaginary(_))))) => panic!(),
+                _ => {}
             }
         }
     }
@@ -414,13 +432,13 @@ mod test {
             r"82",         // illegal: it is integer
         ];
         for float in valid_floats.into_iter() {
-            assert_eq!(lexer.next(float).unwrap().1,
+            assert_eq!(token(lexer.next(float)),
                        GoToken::Literal(GoLiteral::Float(&float)));
         }
         for float in illegal_floats.into_iter() {
-            println!("{}", &float);
-            if !lexer.next(float).is_err() {
-                assert!(lexer.next(float).unwrap().1 != GoToken::Literal(GoLiteral::Float(&float)))
+            match lexer.next(float) {
+                Some(Ok((_, Literal(GoLiteral::Float(_))))) => panic!(),
+                _ => {}
             }
         }
     }
@@ -453,11 +471,11 @@ mod test {
             // r"'\U00110000'", // illegal: invalid Unicode code point
         ];
         for rune in valid_runes.into_iter() {
-            assert_eq!(lexer.next(rune).unwrap().1,
+            assert_eq!(token(lexer.next(rune)),
                        GoToken::Literal(GoLiteral::Rune(&rune[1..rune.len() - 1])));
         }
         for rune in illegal_runes.into_iter() {
-            assert!(lexer.next(rune).is_err());
+            assert!(lexer.next(rune).unwrap().is_err());
         }
     }
 
@@ -480,13 +498,23 @@ mod test {
         ];
 
         for s in raw_strings.into_iter() {
-            assert_eq!(lexer.next(s).unwrap().1,
+            assert_eq!(token(lexer.next(s)),
                        GoToken::Literal(GoLiteral::RawString(&s[1..s.len() - 1])));
         }
 
         for s in interpreted_strings.into_iter() {
-            assert_eq!(lexer.next(s).unwrap().1,
+            assert_eq!(token(lexer.next(s)),
                        GoToken::Literal(GoLiteral::InterpretedString(&s[1..s.len() - 1])));
         }
+    }
+
+    #[test]
+    fn test_white_space() {
+        let lexer = make_lexer();
+        let source = " \t\n42\n";
+        let tokens = engine(&lexer, source);
+
+        assert!(tokens.is_ok());
+        assert_eq!(tokens.unwrap(), vec![Literal(GoLiteral::Integer("42"))]);
     }
 }
