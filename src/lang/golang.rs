@@ -117,9 +117,34 @@ pub enum GoLiteral<'a> {
 
 pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
     let constant = |x| { move |_| x };
+
+    let rune: &str = r#"(?x)
+        ' # open quote
+        ( # unicode_value = unicode_char | little_u_value | big_u_value | escaped_char
+
+              # unicode_char = /* an arbitrary Unicode code point except newline */
+                [^\\\n]
+            | # little_u_value
+                \\u ([0-9A-Fa-f]){4}  # TODO: change to [[:xdigit:]]
+            | # big_u_value
+                \\U ([0-9A-Fa-f]){8}  # TODO: change to [[:xdigit:]]
+            | # escaped_char
+                \\   [abfnrtv\\'"]
+
+        | # byte value = octal_byte_value | hex_byte_value
+
+              # octal_byte_value
+                \\   [0-7]{3}
+            | # hex_byte_value
+                \\x ([0-9A-Fa-f]){2}  # TODO: change to [[:xdigit:]]
+        )
+        ' # close quote
+    "#;
+
+
     LexerBuilder::new()
         .add(r"-", constant(Operator(GoOperator::Dec)))
-        .add(r"[^<>\[\],.+\-]+", |c| GoToken::Comment(c.get(0).unwrap().as_str()))
+        .add(rune, |c| GoToken::Literal(GoLiteral::Rune(c.get(0).unwrap().as_str())))
         .build() 
 }
 
@@ -130,6 +155,34 @@ impl<'a> Token<'a> for GoToken<'a> {
             GoToken::Ident(ref id) => id.to_string(),
             GoToken::Keyword(ref kw) => format!("{:?}", kw),
             _ => format!("{:?}", self),
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_rune() {
+        let lexer = make_lexer();
+
+        let runes_source = r"'a'
+'ä'
+'本'
+'\t'
+'\000'
+'\007'
+'\377'
+'\x07'
+'\xff'
+'\u12e4'
+'\U00101234'
+'\''
+";
+        for rune in runes_source.lines() {
+            assert_eq!(lexer.next(rune).unwrap().1,
+                       GoToken::Literal(GoLiteral::Rune(rune)));
         }
     }
 }
