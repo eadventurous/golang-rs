@@ -118,7 +118,7 @@ pub enum GoLiteral<'a> {
 pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
     let constant = |x| { move |_| x };
 
-    let rune: &str = r#"(?x)
+    let rune = r#"(?x)
         ' # open quote
         ( # unicode_value = unicode_char | little_u_value | big_u_value | escaped_char
 
@@ -167,22 +167,35 @@ mod test {
     fn test_rune() {
         let lexer = make_lexer();
 
-        let runes_source = r"'a'
-'ä'
-'本'
-'\t'
-'\000'
-'\007'
-'\377'
-'\x07'
-'\xff'
-'\u12e4'
-'\U00101234'
-'\''
-";
-        for rune in runes_source.lines() {
+        let valid_runes = [
+            r"'a'",
+            r"'ä'",
+            r"'本'",
+            r"'\t'",
+            r"'\000'",
+            r"'\007'",
+            r"'\377'",
+            r"'\x07'",
+            r"'\xff'",
+            r"'\u12e4'",
+            r"'\U00101234'",
+            r"'\''",         // rune literal containing single quote character
+        ];
+        let illegal_runes = [
+            r"'aa'",         // illegal: too many characters
+            r"'\xa'",        // illegal: too few hexadecimal digits
+            r"'\0'",         // illegal: too few octal digits
+            // Regexp-based lexer cannot detect surrogate half,
+            // r"'\uDFFF'",     // illegal: surrogate half
+            // ...nor it is capable of understanding Unicode code points.
+            // r"'\U00110000'", // illegal: invalid Unicode code point
+        ];
+        for rune in valid_runes.into_iter() {
             assert_eq!(lexer.next(rune).unwrap().1,
                        GoToken::Literal(GoLiteral::Rune(rune)));
+        }
+        for rune in illegal_runes.into_iter() {
+            assert!(lexer.next(rune).is_err());
         }
     }
 }
