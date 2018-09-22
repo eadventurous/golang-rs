@@ -118,61 +118,8 @@ pub enum GoLiteral<'a> {
 pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
     let constant = |x| { move |_| x };
     LexerBuilder::new()
-        .add(r"\+", constant(Operator(GoOperator::Add)))
-        .add(r"-", constant(Operator(GoOperator::Sub)))
-        .add(r"\*", constant(Operator(GoOperator::Mul)))
-        .add(r"/", constant(Operator(GoOperator::Quo)))
-        .add(r"%", constant(Operator(GoOperator::Rem)))
-
-        .add(r"&", constant(Operator(GoOperator::And)))
-        .add(r"|", constant(Operator(GoOperator::Or)))
-        .add(r"\^", constant(Operator(GoOperator::Xor)))
-        .add(r"<<", constant(Operator(GoOperator::Shl)))
-        .add(r">>", constant(Operator(GoOperator::Shr)))
-        .add(r"&\^", constant(Operator(GoOperator::AndNot)))
-
-        .add(r"\+=", constant(Operator(GoOperator::AddAssign)))
-        .add(r"-=", constant(Operator(GoOperator::SubAssign)))
-        .add(r"\*=", constant(Operator(GoOperator::MulAssign)))
-        .add(r"/=", constant(Operator(GoOperator::QuoAssign)))
-        .add(r"%=", constant(Operator(GoOperator::RemAssign)))
-
-        .add(r"&=", constant(Operator(GoOperator::AndAssign)))
-        .add(r"\|=", constant(Operator(GoOperator::OrAssign)))
-        .add(r"\^=", constant(Operator(GoOperator::XorAssign)))
-        .add(r"<<=", constant(Operator(GoOperator::ShlAssign)))
-        .add(r">>=", constant(Operator(GoOperator::ShrAssign)))
-        .add(r"&\^=", constant(Operator(GoOperator::AndNotAssign)))
-
-        .add(r"&&", constant(Operator(GoOperator::LAnd)))
-        .add(r"\|\|", constant(Operator(GoOperator::LOr)))
-        .add(r"<-", constant(Operator(GoOperator::Arrow)))
-        .add(r"++", constant(Operator(GoOperator::Inc)))
-        .add(r"--", constant(Operator(GoOperator::Dec)))
-
-        .add(r"==", constant(Operator(GoOperator::Eql)))
-        .add(r"<", constant(Operator(GoOperator::Lss)))
-        .add(r">", constant(Operator(GoOperator::Gtr)))
-        .add(r"=", constant(Operator(GoOperator::Assign)))
-        .add(r"!", constant(Operator(GoOperator::Not)))
-
-        .add(r"!=", constant(Operator(GoOperator::NEq)))
-        .add(r"<=", constant(Operator(GoOperator::LEq)))
-        .add(r">=", constant(Operator(GoOperator::GEq)))
-        .add(r":=", constant(Operator(GoOperator::Define)))
-        .add(r"\.\.\.", constant(Operator(GoOperator::Ellipsis)))
-
-        .add(r"\(", constant(Operator(GoOperator::LParen)))
-        .add(r"\[", constant(Operator(GoOperator::LBrack)))
-        .add(r"\{", constant(Operator(GoOperator::LBrace)))
-        .add(r",", constant(Operator(GoOperator::Comma)))
-        .add(r"\.", constant(Operator(GoOperator::Period)))
-
-        .add(r"\)", constant(Operator(GoOperator::RParen)))
-        .add(r"\]", constant(Operator(GoOperator::RBrack)))
-        .add(r"\}", constant(Operator(GoOperator::RBrace)))
-        .add(r";", constant(Operator(GoOperator::Semicolon)))
-        .add(r"\:", constant(Operator(GoOperator::Colon)))
+        .add(r"//.*$", |c| Comment(c.get(0).unwrap().as_str()))
+        .add(r"/\*.*?\*/", |c| Comment(c.get(0).unwrap().as_str()))
 
         .add(r"break", constant(Keyword(GoKeyword::Break)))
         .add(r"case", constant(Keyword(GoKeyword::Case)))
@@ -204,21 +151,74 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
         .add(r"type", constant(Keyword(GoKeyword::Type)))
         .add(r"var", constant(Keyword(GoKeyword::Var)))
 
-        .add(r"//.*$", |c| Comment(c.get(0).unwrap().as_str()))
-        .add(r"/\*.*?\*/", |c| Comment(c.get(0).unwrap().as_str()))
+        .add(r"[[:digit:]]*\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
+        .add(r"[[:digit:]]*(e|E)(\+|-)?[[:digit:]]*i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
+        .add(r"\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
+        .add(r"[[:digit:]]*i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
+
+        .add(r"[[:digit:]]*\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?", |c| Literal(GoLiteral::Float(c.get(0).unwrap().as_str())))
+        .add(r"[[:digit:]]*(e|E)(\+|-)?[[:digit:]]*", |c| Literal(GoLiteral::Float(c.get(0).unwrap().as_str())))
+        .add(r"\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?", |c| Literal(GoLiteral::Float(c.get(0).unwrap().as_str())))
 
         .add(r"[1-9]+[[:digit:]]*", |c| Literal(GoLiteral::Integer(c.get(0).unwrap().as_str())))
         .add(r"0[0-7]*", |c| Literal(GoLiteral::Integer(c.get(0).unwrap().as_str())))
         .add(r"0(x|X)[[:xdigit:]]+", |c| Literal(GoLiteral::Integer(c.get(0).unwrap().as_str())))
 
-        .add(r"[[:digit:]]*\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?", |c| Literal(GoLiteral::Float(c.get(0).unwrap().as_str())))
-        .add(r"[[:digit:]]*(e|E)(\+|-)?[[:digit:]]*", |c| Literal(GoLiteral::Float(c.get(0).unwrap().as_str())))
-        .add(r"\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?", |c| Literal(GoLiteral::Float(c.get(0).unwrap().as_str())))
-        
-        .add(r"[[:digit:]]*\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
-        .add(r"[[:digit:]]*(e|E)(\+|-)?[[:digit:]]*i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
-        .add(r"\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
-        .add(r"[[:digit:]]*i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
+        .add(r"\+=", constant(Operator(GoOperator::AddAssign)))
+        .add(r"-=", constant(Operator(GoOperator::SubAssign)))
+        .add(r"\*=", constant(Operator(GoOperator::MulAssign)))
+        .add(r"/=", constant(Operator(GoOperator::QuoAssign)))
+        .add(r"%=", constant(Operator(GoOperator::RemAssign)))
+
+        .add(r"&=", constant(Operator(GoOperator::AndAssign)))
+        .add(r"\|=", constant(Operator(GoOperator::OrAssign)))
+        .add(r"\^=", constant(Operator(GoOperator::XorAssign)))
+        .add(r"<<=", constant(Operator(GoOperator::ShlAssign)))
+        .add(r">>=", constant(Operator(GoOperator::ShrAssign)))
+        .add(r"&\^=", constant(Operator(GoOperator::AndNotAssign)))
+
+        .add(r"&&", constant(Operator(GoOperator::LAnd)))
+        .add(r"\|\|", constant(Operator(GoOperator::LOr)))
+        .add(r"<-", constant(Operator(GoOperator::Arrow)))
+        .add(r"\+\+", constant(Operator(GoOperator::Inc)))
+        .add(r"--", constant(Operator(GoOperator::Dec)))
+
+        .add(r"!=", constant(Operator(GoOperator::NEq)))
+        .add(r"<=", constant(Operator(GoOperator::LEq)))
+        .add(r">=", constant(Operator(GoOperator::GEq)))
+        .add(r":=", constant(Operator(GoOperator::Define)))
+        .add(r"\.\.\.", constant(Operator(GoOperator::Ellipsis)))
+
+        .add(r"\(", constant(Operator(GoOperator::LParen)))
+        .add(r"\[", constant(Operator(GoOperator::LBrack)))
+        .add(r"\{", constant(Operator(GoOperator::LBrace)))
+        .add(r",", constant(Operator(GoOperator::Comma)))
+        .add(r"\.", constant(Operator(GoOperator::Period)))
+
+        .add(r"\)", constant(Operator(GoOperator::RParen)))
+        .add(r"\]", constant(Operator(GoOperator::RBrack)))
+        .add(r"\}", constant(Operator(GoOperator::RBrace)))
+        .add(r";", constant(Operator(GoOperator::Semicolon)))
+        .add(r":", constant(Operator(GoOperator::Colon)))
+
+        .add(r"==", constant(Operator(GoOperator::Eql)))
+        .add(r"<", constant(Operator(GoOperator::Lss)))
+        .add(r">", constant(Operator(GoOperator::Gtr)))
+        .add(r"=", constant(Operator(GoOperator::Assign)))
+        .add(r"!", constant(Operator(GoOperator::Not)))
+
+        .add(r"&\^", constant(Operator(GoOperator::AndNot)))
+        .add(r"&", constant(Operator(GoOperator::And)))
+        .add(r"\|", constant(Operator(GoOperator::Or)))
+        .add(r"\^", constant(Operator(GoOperator::Xor)))
+        .add(r"<<", constant(Operator(GoOperator::Shl)))
+        .add(r">>", constant(Operator(GoOperator::Shr)))
+
+        .add(r"\+", constant(Operator(GoOperator::Add)))
+        .add(r"-", constant(Operator(GoOperator::Sub)))
+        .add(r"\*", constant(Operator(GoOperator::Mul)))
+        .add(r"/", constant(Operator(GoOperator::Quo)))
+        .add(r"%", constant(Operator(GoOperator::Rem)))
 
         .build()
 }
@@ -231,5 +231,19 @@ impl<'a> Token<'a> for GoToken<'a> {
             GoToken::Keyword(ref kw) => format!("{:?}", kw),
             _ => format!("{:?}", self),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use ::engine;
+
+    #[test]
+    fn golang() {
+        let source = &r"2.71828";
+
+        let tokens = engine(&make_lexer(), source).unwrap();
+        assert_eq!(tokens, vec![Literal(GoLiteral::Float("2.71828"))]);
     }
 }
