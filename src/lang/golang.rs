@@ -191,14 +191,14 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
         .add(r"type", constant(Keyword(GoKeyword::Type)))
         .add(r"var", constant(Keyword(GoKeyword::Var)))
 
-        .add(r"[[:digit:]]*\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
-        .add(r"[[:digit:]]*(e|E)(\+|-)?[[:digit:]]*i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
-        .add(r"\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
-        .add(r"[[:digit:]]*i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
+        .add(r"[[:digit:]]+\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
+        .add(r"[[:digit:]]+(e|E)(\+|-)?[[:digit:]]*i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
+        .add(r"\.[[:digit:]]+((e|E)(\+|-)?[[:digit:]]*)?i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
+        .add(r"[[:digit:]]+i", |c| Literal(GoLiteral::Imaginary(c.get(0).unwrap().as_str())))
 
-        .add(r"[[:digit:]]*\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?", |c| Literal(GoLiteral::Float(c.get(0).unwrap().as_str())))
-        .add(r"[[:digit:]]*(e|E)(\+|-)?[[:digit:]]*", |c| Literal(GoLiteral::Float(c.get(0).unwrap().as_str())))
-        .add(r"\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?", |c| Literal(GoLiteral::Float(c.get(0).unwrap().as_str())))
+        .add(r"[[:digit:]]+\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?", |c| Literal(GoLiteral::Float(c.get(0).unwrap().as_str())))
+        .add(r"[[:digit:]]+(e|E)(\+|-)?[[:digit:]]*", |c| Literal(GoLiteral::Float(c.get(0).unwrap().as_str())))
+        .add(r"\.[[:digit:]]+((e|E)(\+|-)?[[:digit:]]*)?", |c| Literal(GoLiteral::Float(c.get(0).unwrap().as_str())))
 
         .add(r"[1-9]+[[:digit:]]*", |c| Literal(GoLiteral::Integer(c.get(0).unwrap().as_str())))
         .add(r"0[0-7]*", |c| Literal(GoLiteral::Integer(c.get(0).unwrap().as_str())))
@@ -261,6 +261,7 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
         .add(r"%", constant(Operator(GoOperator::Rem)))
 
         .add(rune, |c| GoToken::Literal(GoLiteral::Rune(c.get(1).unwrap().as_str())))
+
         .build() 
 }
 
@@ -279,13 +280,70 @@ impl<'a> Token<'a> for GoToken<'a> {
 mod test {
     use super::*;
     use ::engine;
+    #[test]
+    fn test_imaginary() {
+        let lexer = make_lexer();
+
+        let valid_imaginary = [
+            r"0i",
+            r"011i",
+            r"0.i",
+            r"2.71828i",
+            r"1.e+0i",
+            r"6.67428e-11i",
+            r"1E6i",
+            r".25i",
+            r".12345E+5i",
+        ];
+        let illegal_imaginary = [
+            r"e6i",         // illegal: can't start with i
+            r"..6i",        // illegal: too many dots
+            r"82",         // illegal: it is integer
+            r"4.5",        // illegal: it is float
+            r"i",           //illegal: can't start with i
+        ];
+        for imaginary in valid_imaginary.into_iter() {
+            assert_eq!(lexer.next(imaginary).unwrap().1,
+                       GoToken::Literal(GoLiteral::Imaginary(&imaginary)));
+        }
+        for imaginary in illegal_imaginary.into_iter() {
+            println!("{}", &imaginary);
+            if !lexer.next(imaginary).is_err() {
+                assert!(lexer.next(imaginary).unwrap().1 != GoToken::Literal(GoLiteral::Imaginary(&imaginary)))
+            }
+        }
+    }
 
     #[test]
     fn test_float() {
-        let source = &r"2.71828";
+        let lexer = make_lexer();
 
-        let tokens = engine(&make_lexer(), source).unwrap();
-        assert_eq!(tokens, vec![Literal(GoLiteral::Float("2.71828"))]);
+        let valid_floats = [
+            r"0.",
+            r"72.40",
+            r"072.40",
+            r"2.71828",
+            r"1.e+0",
+            r"6.67428e-11",
+            r"1E6",
+            r".25",
+            r".12345E+5",
+        ];
+        let illegal_floats = [
+            r"e6",         // illegal: can't start with exponent
+            r"..6",        // illegal: too many dots
+            r"82",         // illegal: it is integer
+        ];
+        for float in valid_floats.into_iter() {
+            assert_eq!(lexer.next(float).unwrap().1,
+                       GoToken::Literal(GoLiteral::Float(&float)));
+        }
+        for float in illegal_floats.into_iter() {
+            println!("{}", &float);
+            if !lexer.next(float).is_err() {
+                assert!(lexer.next(float).unwrap().1 != GoToken::Literal(GoLiteral::Float(&float)))
+            }
+        }
     }
 
     #[test]
