@@ -262,6 +262,8 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
 
         .add(rune, |c| GoToken::Literal(GoLiteral::Rune(c.get(1).unwrap().as_str())))
 
+        .add(r"(\p{L}|_)(\p{L}|_|\p{Nd})*", |c| Ident(c.get(0).unwrap().as_str()))
+
         .build() 
 }
 
@@ -280,6 +282,36 @@ impl<'a> Token<'a> for GoToken<'a> {
 mod test {
     use super::*;
     use ::engine;
+    
+    #[test]
+    fn test_id() {
+        let lexer = make_lexer();
+
+        let valid_id = [
+            r"a",
+            r"_x9",
+            r"ThisVariableIsExported",
+            r"αβ",
+            r"__var__",
+            r"e",
+            r"i",
+        ];
+        let illegal_id = [
+            r"6a",         // illegal: can't start with digit
+            r".a",        // illegal: can't start with dot
+        ];
+        for id in valid_id.into_iter() {
+            assert_eq!(lexer.next(id).unwrap().1,
+                       GoToken::Ident(&id));
+        }
+        for id in illegal_id.into_iter() {
+            println!("{}", &id);
+            if !lexer.next(id).is_err() {
+                assert!(lexer.next(id).unwrap().1 != GoToken::Ident(&id));
+            }
+        }
+    }
+
     #[test]
     fn test_imaginary() {
         let lexer = make_lexer();
@@ -309,7 +341,7 @@ mod test {
         for imaginary in illegal_imaginary.into_iter() {
             println!("{}", &imaginary);
             if !lexer.next(imaginary).is_err() {
-                assert!(lexer.next(imaginary).unwrap().1 != GoToken::Literal(GoLiteral::Imaginary(&imaginary)))
+                assert!(lexer.next(imaginary).unwrap().1 != GoToken::Literal(GoLiteral::Imaginary(&imaginary)));
             }
         }
     }
