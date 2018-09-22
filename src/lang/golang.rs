@@ -144,9 +144,9 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
               # Note: also except close quote and backslash [as it must be followed by other character(s)]
                 [^\\\n']
             | # little_u_value
-                \\u ([0-9A-Fa-f]){4}  # TODO: change to [[:xdigit:]]
+                \\u [[:xdigit:]]{4}
             | # big_u_value
-                \\U ([0-9A-Fa-f]){8}  # TODO: change to [[:xdigit:]]
+                \\U [[:xdigit:]]{8}
             | # escaped_char
                 \\   [abfnrtv\\'"]
 
@@ -155,7 +155,7 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
               # octal_byte_value
                 \\   [0-7]{3}
             | # hex_byte_value
-                \\x ([0-9A-Fa-f]){2}  # TODO: change to [[:xdigit:]]
+                \\x [[:xdigit:]]{2}
         )
         ' # close quote
     "#;
@@ -183,9 +183,9 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
                   # Note: also except close quote and backslash [as it must be followed by other character(s)]
                     [^\\\n"]
                 | # little_u_value
-                    \\u ([0-9A-Fa-f]){4}  # TODO: change to [[:xdigit:]]
+                    \\u [[:xdigit:]]{4}
                 | # big_u_value
-                    \\U ([0-9A-Fa-f]){8}  # TODO: change to [[:xdigit:]]
+                    \\U [[:xdigit:]]{8}
                 | # escaped_char
                     \\   [abfnrtv\\'"]
 
@@ -194,7 +194,7 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
                   # octal_byte_value
                     \\   [0-7]{3}
                 | # hex_byte_value
-                    \\x ([0-9A-Fa-f]){2}  # TODO: change to [[:xdigit:]]
+                    \\x [[:xdigit:]]{2}
             )*
         ) # end group 1
         " # close quote
