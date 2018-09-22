@@ -108,9 +108,9 @@ pub enum GoOperator {
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub enum GoLiteral<'a> {
-    /// raw_string_lit         = "`" { unicode_char | newline } "`" .
+    /// ```raw_string_lit         = "`" { unicode_char | newline } "`" .```
     RawString(&'a str),
-    /// interpreted_string_lit = `"` { unicode_value | byte_value } `"` .
+    /// ```interpreted_string_lit = `"` { unicode_value | byte_value } `"` .```
     InterpretedString(&'a str),
     Integer(&'a str),
     Float(&'a str),
@@ -119,16 +119,16 @@ pub enum GoLiteral<'a> {
     ///
     /// A rune literal represents a rune constant, an integer value identifying a Unicode code point.
     ///
-    /// ```
+    /// ```ebnf
     /// rune_lit         = "'" ( unicode_value | byte_value ) "'" .
     /// unicode_value    = unicode_char | little_u_value | big_u_value | escaped_char .
     /// byte_value       = octal_byte_value | hex_byte_value .
-    /// octal_byte_value = `\` octal_digit octal_digit octal_digit .
-    /// hex_byte_value   = `\` "x" hex_digit hex_digit .
-    /// little_u_value   = `\` "u" hex_digit hex_digit hex_digit hex_digit .
-    /// big_u_value      = `\` "U" hex_digit hex_digit hex_digit hex_digit
+    /// octal_byte_value = `\\` octal_digit octal_digit octal_digit .
+    /// hex_byte_value   = `\\` "x" hex_digit hex_digit .
+    /// little_u_value   = `\\` "u" hex_digit hex_digit hex_digit hex_digit .
+    /// big_u_value      = `\\` "U" hex_digit hex_digit hex_digit hex_digit
     ///                            hex_digit hex_digit hex_digit hex_digit .
-    /// escaped_char     = `\` ( "a" | "b" | "f" | "n" | "r" | "t" | "v" | `\` | "'" | `"` ) .
+    /// escaped_char     = `\\` ( "a" | "b" | "f" | "n" | "r" | "t" | "v" | `\` | "'" | `"` ) .
     /// ```
     Rune(&'a str),
 }
@@ -220,8 +220,8 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
 
     LexerBuilder::new()
         .skip_whitespaces(whitespace_filter)
-        .add(r"//.*$", |c| Comment(c.get(0).unwrap().as_str()))
-        .add(r"/\*.*?\*/", |c| Comment(c.get(0).unwrap().as_str()))
+        .add(r"//([^\n]*)\n?", |c| Comment(c.get(1).unwrap().as_str()))
+        .add(r"(?s)/\*(.*?)\*/", |c| Comment(c.get(1).unwrap().as_str()))
 
         .add(r"break", constant(Keyword(GoKeyword::Break)))
         .add(r"case", constant(Keyword(GoKeyword::Case)))

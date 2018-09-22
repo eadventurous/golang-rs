@@ -4,7 +4,7 @@
 
 extern crate regex;
 
-mod lang;
+pub mod lang;
 
 use lang::{Token, TokenFactory};
 
@@ -67,10 +67,11 @@ pub struct Lexer<'a, T> {
 impl<'a, T> Lexer<'a, T>
     where T: Token<'a>
 {
+    /// ```raw
     /// skip_whitespaces(source).is_empty() => None
     /// parse(skip_whitespaces(source)).is_ok() => Some(Ok(rest, token))
     /// parse(skip_whitespaces(source)).is_err() => Some(Err(...))
-    /// Option<Result<(&'a str, T), ()>>
+    /// ```
     pub fn next(&self, source: &'a str) -> Option<Result<(&'a str, T), ()>> {
         // prepare source string
         let source = (self.skip_whitespaces)(source);
@@ -100,22 +101,26 @@ impl<'a, T> Lexer<'a, T>
     }
 }
 
-
+/// Little helper for tests.
 pub fn token<'a, T: Token<'a>>(x: Option<Result<(&'a str, T), ()>>) -> T {
     x.unwrap().unwrap().1
 }
 
 
-pub fn engine<'a, T>(lexer: &Lexer<'a, T>, mut source: &'a str) -> Result<Vec<T>, ()>
+pub fn engine<'a, T>(lexer: &Lexer<'a, T>, mut source: &'a str) -> Result<Vec<T>, Vec<T>>
     where T: Token<'a>
 {
     let mut tokens = vec![];
 
     while let Some(result) = lexer.next(source) {
-        let (rest, token) = result?;
-        // println!("{} {} {:?}", source.len(), source, token);
-        source = rest;
-        tokens.push(token);
+        match result {
+            Ok((rest, token)) => {
+                // println!("{} {} {:?}", source.len(), source, token);
+                source = rest;
+                tokens.push(token);
+            }
+            Err(_) => return Err(tokens)
+        }
     }
     Ok(tokens)
 }
@@ -136,6 +141,9 @@ fn main() {
     let lexer = lang::golang::make_lexer();
     match engine(&lexer, &source) {
         Ok(tokens) => print_tokens(tokens),
-        Err(()) => println!("ERROR"),
+        Err(tokens) => {
+            print_tokens(tokens);
+            println!("ERROR");
+        }
     }
 }
