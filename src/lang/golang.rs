@@ -112,6 +112,21 @@ pub enum GoLiteral<'a> {
     Integer(&'a str),
     Float(&'a str),
     Imaginary(&'a str),
+    /// From golang specs:
+    ///
+    /// A rune literal represents a rune constant, an integer value identifying a Unicode code point.
+    ///
+    /// ```
+    /// rune_lit         = "'" ( unicode_value | byte_value ) "'" .
+    /// unicode_value    = unicode_char | little_u_value | big_u_value | escaped_char .
+    /// byte_value       = octal_byte_value | hex_byte_value .
+    /// octal_byte_value = `\` octal_digit octal_digit octal_digit .
+    /// hex_byte_value   = `\` "x" hex_digit hex_digit .
+    /// little_u_value   = `\` "u" hex_digit hex_digit hex_digit hex_digit .
+    /// big_u_value      = `\` "U" hex_digit hex_digit hex_digit hex_digit
+    ///                            hex_digit hex_digit hex_digit hex_digit .
+    /// escaped_char     = `\` ( "a" | "b" | "f" | "n" | "r" | "t" | "v" | `\` | "'" | `"` ) .
+    /// ```
     Rune(&'a str),
 }
 
@@ -144,8 +159,8 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
 
     LexerBuilder::new()
         .add(r"-", constant(Operator(GoOperator::Dec)))
-        .add(rune, |c| GoToken::Literal(GoLiteral::Rune(c.get(0).unwrap().as_str())))
-        .build() 
+        .add(rune, |c| GoToken::Literal(GoLiteral::Rune(c.get(1).unwrap().as_str())))
+        .build()
 }
 
 
@@ -192,7 +207,7 @@ mod test {
         ];
         for rune in valid_runes.into_iter() {
             assert_eq!(lexer.next(rune).unwrap().1,
-                       GoToken::Literal(GoLiteral::Rune(rune)));
+                       GoToken::Literal(GoLiteral::Rune(&rune[1..rune.len() - 1])));
         }
         for rune in illegal_runes.into_iter() {
             assert!(lexer.next(rune).is_err());
