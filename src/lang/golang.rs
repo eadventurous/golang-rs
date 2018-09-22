@@ -108,7 +108,10 @@ pub enum GoOperator {
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub enum GoLiteral<'a> {
-    String(&'a str),
+    /// raw_string_lit         = "`" { unicode_char | newline } "`" .
+    RawString(&'a str),
+    /// interpreted_string_lit = `"` { unicode_value | byte_value } `"` .
+    InterpretedString(&'a str),
     Integer(&'a str),
     Float(&'a str),
     Imaginary(&'a str),
@@ -138,11 +141,12 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
         ( # unicode_value = unicode_char | little_u_value | big_u_value | escaped_char
 
               # unicode_char = /* an arbitrary Unicode code point except newline */
-                [^\\\n]
+              # Note: also except close quote and backslash [as it must be followed by other character(s)]
+                [^\\\n']
             | # little_u_value
-                \\u ([0-9A-Fa-f]){4}  # TODO: change to [[:xdigit:]]
+                \\u [[:xdigit:]]{4}
             | # big_u_value
-                \\U ([0-9A-Fa-f]){8}  # TODO: change to [[:xdigit:]]
+                \\U [[:xdigit:]]{8}
             | # escaped_char
                 \\   [abfnrtv\\'"]
 
@@ -151,11 +155,51 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
               # octal_byte_value
                 \\   [0-7]{3}
             | # hex_byte_value
-                \\x ([0-9A-Fa-f]){2}  # TODO: change to [[:xdigit:]]
+                \\x [[:xdigit:]]{2}
         )
         ' # close quote
     "#;
 
+    // raw_string_lit         = "`" { unicode_char | newline } "`" .
+    let raw_string = r#"(?x)
+        ` # open quote
+        ( # group 1
+            (?: # unicode_char
+                [^`]
+            |   # newline
+                \n
+            )*?
+        ) # end group 1
+        ` # close quote
+    "#;
+
+    // interpreted_string_lit = `"` { unicode_value | byte_value } `"` .
+    let interpreted_string = r#"(?x)
+        " # open quote
+        ( # group 1
+            (?: # unicode_value = unicode_char | little_u_value | big_u_value | escaped_char
+
+                  # unicode_char = /* an arbitrary Unicode code point except newline */
+                  # Note: also except close quote and backslash [as it must be followed by other character(s)]
+                    [^\\\n"]
+                | # little_u_value
+                    \\u [[:xdigit:]]{4}
+                | # big_u_value
+                    \\U [[:xdigit:]]{8}
+                | # escaped_char
+                    \\   [abfnrtv\\'"]
+
+            |   # byte value = octal_byte_value | hex_byte_value
+
+                  # octal_byte_value
+                    \\   [0-7]{3}
+                | # hex_byte_value
+                    \\x [[:xdigit:]]{2}
+            )*
+        ) # end group 1
+        " # close quote
+
+    "#;
 
     LexerBuilder::new()
         .add(r"//.*$", |c| Comment(c.get(0).unwrap().as_str()))
@@ -262,9 +306,12 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
 
         .add(rune, |c| GoToken::Literal(GoLiteral::Rune(c.get(1).unwrap().as_str())))
 
+        .add(raw_string, |c| GoToken::Literal(GoLiteral::RawString(c.get(1).unwrap().as_str())))
+        .add(interpreted_string, |c| GoToken::Literal(GoLiteral::InterpretedString(c.get(1).unwrap().as_str())))
+
         .add(r"(\p{L}|_)(\p{L}|_|\p{Nd})*", |c| Ident(c.get(0).unwrap().as_str()))
 
-        .build() 
+        .build()
 }
 
 
@@ -411,6 +458,35 @@ mod test {
         }
         for rune in illegal_runes.into_iter() {
             assert!(lexer.next(rune).is_err());
+        }
+    }
+
+    #[test]
+    fn test_string_lit() {
+        let lexer = make_lexer();
+
+        let raw_strings = [
+            r"`abc`",                // same as "abc"
+            r"`\n
+\n`",                                // same as "\\n\n\\n"
+        ];
+        let interpreted_strings = [
+            r#""\n""#,
+            r#""\"""#,                   // same as `"`
+            r#""Hello, world!\n""#,
+            r#""日本語""#,
+            r#""\u65e5本\U00008a9e""#,
+            r#""\xff\u00FF""#,
+        ];
+
+        for s in raw_strings.into_iter() {
+            assert_eq!(lexer.next(s).unwrap().1,
+                       GoToken::Literal(GoLiteral::RawString(&s[1..s.len() - 1])));
+        }
+
+        for s in interpreted_strings.into_iter() {
+            assert_eq!(lexer.next(s).unwrap().1,
+                       GoToken::Literal(GoLiteral::InterpretedString(&s[1..s.len() - 1])));
         }
     }
 }
