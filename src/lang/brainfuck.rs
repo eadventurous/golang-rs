@@ -1,5 +1,4 @@
-use ::{Lexer, LexerBuilder, TokenFactory};
-use regex::Match;
+use ::{Lexer, LexerBuilder};
 use super::Token;
 
 pub use self::BfToken::*;

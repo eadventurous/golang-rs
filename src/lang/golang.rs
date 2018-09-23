@@ -1,6 +1,5 @@
-use super::{Token, TokenFactory};
+use super::Token;
 use ::{Lexer, LexerBuilder, token};
-use regex::Match;
 pub use self::GoToken::*;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
