@@ -1,3 +1,15 @@
+//! Lexer presented here is generic about language and
+//! based on regular expressions.
+//!
+//! `LexerBuilder` type uses [Builder pattern] to create `Lexer` instances.
+//!
+//! `Token` is generic trait that supposed to be implemented by `enum` of
+//! particular language's all possible tokens.
+//!
+//! `TokenFactory` is just a fancy way to say "convert regex capture to a
+//! token".
+//!
+//! [Builder pattern]: https://en.wikipedia.org/wiki/Builder_pattern
 use regex::{Captures, Regex};
 use std::fmt::Debug;
 

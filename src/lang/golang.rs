@@ -10,9 +10,9 @@ pub enum GoToken<'a> {
     Keyword(GoKeyword),
     /// operators and punctuation,
     Operator(GoOperator),
-    // literals
+    /// Literal values like strings and numbers.
     Literal(GoLiteral<'a>),
-    // comment
+    /// Single-line and multi-line comments
     Comment(&'a str),
 }
 
