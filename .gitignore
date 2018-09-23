@@ -76,3 +76,7 @@ Cargo.lock
 
 .idea/
 Session.vim
+
+# input and output files
+out.txt
+in.txt
