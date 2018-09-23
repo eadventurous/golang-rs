@@ -1,5 +1,5 @@
-use super::Token;
-use ::{Lexer, LexerBuilder, token};
+use lex::{Lexer, LexerBuilder, Token};
+
 pub use self::GoToken::*;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
@@ -345,7 +345,7 @@ impl<'a> Token<'a> for GoToken<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ::engine;
+    use ::{engine, token};
 
     #[test]
     fn test_id() {

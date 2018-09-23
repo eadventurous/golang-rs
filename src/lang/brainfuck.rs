@@ -1,5 +1,4 @@
-use ::{Lexer, LexerBuilder};
-use super::Token;
+use lex::{Lexer, LexerBuilder, Token};
 
 pub use self::BfToken::*;
 
