@@ -198,3 +198,170 @@ impl<'a, T, F> TokenFactory<'a, T> for F
         self(c)
     }
 }
+
+
+pub trait Metrics {}
+
+pub struct Bytes;
+
+impl Metrics for Bytes {}
+
+pub struct Chars;
+
+impl Metrics for Chars {}
+
+
+#[derive(Copy, Clone, Debug, Default)]
+pub struct Location<M> {
+    /// Line in source file, starting from 1.
+    /// Such that `source.lines().nth(loc.line - 1)` is the referenced line.
+    pub line: usize,
+    /// Column at line `line` in source file, starting from 1.
+    /// Such that `line.chars().nth(loc.column - 1)` is the referenced character.
+    pub column: usize,
+    /// Absolute position of character in source file starting from 0.
+    /// Such that `source.chars().nth(loc.absolute)` is the references character.
+    pub absolute: usize,
+    _marker: PhantomData<M>,
+}
+
+impl<M: Metrics> Location<M> {
+    pub fn new(line: usize, column: usize, absolute: usize) -> Self {
+        Self { line, column, absolute, _marker: PhantomData }
+    }
+
+    /// Location of character addressed by absolute position in source `string`.
+    ///
+    /// # Panics
+    ///
+    /// `Err` if
+    pub fn from(string: &str, absolute: usize) -> Self {
+        if absolute > string.chars().count() {
+            panic!("absolute position > length of string");
+        }
+
+        let mut line = 1;
+        let mut column = 1;
+
+        fn is_newline(c: char) -> bool {
+            let c = c as u8;
+            return c == 0x0d  // carriage returns (U+000D)
+                || c == 0x0a; // newlines (U+000A)
+        }
+
+        for c in string.chars().take(absolute) {
+            if is_newline(c) {
+                line += 1;
+                column = 1;
+            } else {
+                column += 1;
+            }
+        }
+
+        Self { line, column, absolute, _marker: PhantomData }
+    }
+}
+
+impl<M> PartialEq for Location<M> {
+    fn eq(&self, other: &Location<M>) -> bool {
+        self.absolute == other.absolute
+    }
+}
+
+impl<M> Eq for Location<M> {}
+
+impl<M> PartialOrd for Location<M> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<M> Ord for Location<M> {
+    fn cmp(&self, other: &Location<M>) -> Ordering {
+        self.absolute.cmp(&other.absolute)
+    }
+}
+
+
+/// Span of substring in string.
+///
+/// # Invariant
+///
+/// - `end` location must be no less than `start` location.
+/// - If end location is equal to start location, then span length is 1.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
+pub struct Span<M> {
+    pub start: Location<M>,
+    pub end: Location<M>,
+}
+
+impl<M> Span<M> {
+    /// Span length, inclusive.
+    ///
+    /// # Panics
+    ///
+    /// Method will panic if span invariant does not hold.
+    pub fn len(&self) -> usize {
+        assert!(self.start.absolute <= self.end.absolute);
+        1 + self.end.absolute - self.start.absolute
+    }
+}
+
+impl Span<Chars> {
+    pub fn slice(&self, string: &str) -> String {
+        assert!(self.end.absolute < string.chars().count());
+        string.chars()
+              .skip(self.start.absolute)
+              .take(self.len())
+              .collect()
+    }
+}
+
+impl Span<Bytes> {
+    pub fn slice<'a>(&self, string: &'a str) -> &'a str {
+        &string[self.start.absolute..=self.end.absolute]
+    }
+}
+
+
+pub struct TokenMeta<T, M> {
+    span: Span<M>,
+    token: T,
+}
+
+#[derive(Debug)]
+pub struct Error<'a, M> {
+    span: Span<M>,
+    rest: &'a str,
+    description: Option<String>,
+}
+
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    const SOURCE: &str = "line one\nline two";
+
+    #[test]
+    fn test_span_char() {
+        // span over "one\nline" substring
+        let one_line_char: Span<Chars> = Span {
+            start: Location::new(1, 6, 5),
+            end: Location::new(2, 4, 12),
+        };
+        assert_eq!(one_line_char.slice(SOURCE), "one\nline");
+        assert_eq!(one_line_char.len(), 8);
+
+    }
+
+    #[test]
+    fn test_span_bytes() {
+        let one_line_bytes: Span<Bytes> = Span {
+            start: Location::new(1, 6, 5),
+            end: Location::new(2, 4, 12),
+        };
+        assert_eq!(one_line_bytes.slice(SOURCE), "one\nline");
+        assert_eq!(one_line_bytes.len(), 8);
+    }
+}
