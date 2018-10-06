@@ -37,13 +37,12 @@ pub fn make_lexer<'a>() -> Lexer<'a, BfToken<'a>> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ::engine;
 
     #[test]
     fn brainfuck() {
         let source = &r#"++L[>+<-].End"#[..];
 
-        let tokens = engine(&make_lexer(), source).unwrap();
+        let tokens = make_lexer().tokens(source).filter_map(Result::ok).collect::<Vec<_>>();
         assert_eq!(tokens, vec![Inc, Inc, Comment("L"), Cond, Right, Inc, Left, Dec, Loop, Output, Comment("End")]);
     }
 }

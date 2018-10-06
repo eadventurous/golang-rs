@@ -12,17 +12,39 @@
 //! [Builder pattern]: https://en.wikipedia.org/wiki/Builder_pattern
 use regex::{Captures, Regex};
 use std::fmt::Debug;
+use std::cmp::Ordering;
+use std::marker::PhantomData;
+use std::rc::Rc;
 
 
 pub struct Lexer<'a, T> {
-    pairs: Vec<(Regex, Box<TokenFactory<'a, T>>)>,
+    pairs: Rc<Vec<(Regex, Box<TokenFactory<'a, T>>)>>,
     skip_whitespaces: fn(&'a str) -> &'a str,
+}
+
+impl<'a, T> Clone for Lexer<'a, T> {
+    fn clone(&self) -> Self {
+        Lexer {
+            pairs: Rc::clone(&self.pairs),
+            skip_whitespaces: self.skip_whitespaces,
+        }
+    }
 }
 
 
 impl<'a, T> Lexer<'a, T>
     where T: Token<'a>
 {
+    /// Wrap lexer into `Tokens` stream without transfer of ownership.
+    pub fn tokens(&self, source: &'a str) -> Tokens<'a, T> {
+        Tokens::new(self.clone(), source)
+    }
+
+    /// Wrap lexer into `Tokens` stream with transfer of ownership.
+    pub fn into_tokens(self, source: &'a str) -> Tokens<'a, T> {
+        Tokens::new(self, source)
+    }
+
     /// ```raw
     /// skip_whitespaces(source).is_empty() => None
     /// parse(skip_whitespaces(source)).is_ok() => Some(Ok(rest, token))
@@ -54,6 +76,53 @@ impl<'a, T> Lexer<'a, T>
                 .ok_or(())?;
         let rest = &source[len..];
         Ok((rest, token))
+    }
+}
+
+/// Iterator over token stream, based on types `Lexer` and `Token`.
+///
+/// Engine which uses lexer to split source code into lexemes.
+///
+/// This engine is just an example of how processing whole file might be
+/// implemented. While it is powerful enough to handle any source file,
+/// it has some limitations: for example, it does not provide information
+/// about location and span of generated tokens.
+pub struct Tokens<'a, T> {
+    lexer: Lexer<'a, T>,
+    source: &'a str,
+    error: bool,
+}
+
+impl<'a, T: Token<'a>> Tokens<'a, T> {
+    fn new(lexer: Lexer<'a, T>, source: &'a str) -> Self {
+        Tokens {
+            lexer,
+            source,
+            error: false,
+        }
+    }
+}
+
+
+impl<'a, T> Iterator for Tokens<'a, T>
+    where T: Token<'a> {
+    type Item = Result<T, &'a str>;
+
+    fn next(&mut self) -> Option<Result<T, &'a str>> {
+        match self.error {
+            false => match self.lexer.next(self.source) {
+                Some(Ok((rest, token))) => {
+                    self.source = rest;
+                    Some(Ok(token))
+                }
+                Some(Err(_)) => {
+                    self.error = false;
+                    Some(Err(self.source))
+                }
+                None => None
+            }
+            true => None
+        }
     }
 }
 
@@ -99,7 +168,7 @@ impl<'a, T> LexerBuilder<'a, T>
     }
 
     pub fn build(self) -> Lexer<'a, T> {
-        Lexer { pairs: self.pairs, skip_whitespaces: self.skip_whitespaces }
+        Lexer { pairs: Rc::new(self.pairs), skip_whitespaces: self.skip_whitespaces }
     }
 }
 
@@ -111,7 +180,8 @@ pub trait Token<'a>: Ord + Debug + Sized {
 }
 
 
-pub trait TokenFactory<'a, T> where T: Token<'a>
+pub trait TokenFactory<'a, T>
+    where T: Token<'a>
 {
     fn token(&self, c: Captures<'a>) -> T;
 }
