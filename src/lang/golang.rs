@@ -345,7 +345,7 @@ impl<'a> Token<'a> for GoToken<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ::{engine, token};
+    use ::token;
 
     #[test]
     fn test_id() {
@@ -511,9 +511,9 @@ mod test {
     fn test_white_space() {
         let lexer = make_lexer();
         let source = " \t\n42\n";
-        let tokens = engine(&lexer, source);
+        let tokens = lexer.tokens(source).collect::<Vec<_>>();
 
-        assert!(tokens.is_ok());
-        assert_eq!(tokens.unwrap(), vec![Literal(GoLiteral::Integer("42"))]);
+        assert!(tokens.iter().all(Result::is_ok));
+        assert_eq!(tokens.into_iter().map(Result::unwrap).collect::<Vec<_>>(), vec![Literal(GoLiteral::Integer("42"))]);
     }
 }
