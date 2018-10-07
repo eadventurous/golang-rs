@@ -90,6 +90,7 @@ pub struct Tokens<'a, T> {
     lexer: Lexer<'a, T>,
     source: &'a str,
     error: bool,
+    location: Location<Bytes>,
 }
 
 impl<'a, T: Token<'a>> Tokens<'a, T> {
@@ -98,6 +99,7 @@ impl<'a, T: Token<'a>> Tokens<'a, T> {
             lexer,
             source,
             error: false,
+            location: Default::default(),
         }
     }
 }
@@ -292,7 +294,7 @@ impl Metrics for Chars {
 }
 
 
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Copy, Clone, Debug)]
 pub struct Location<M: Metrics> {
     /// Line in source file, starting from 1.
     /// Such that `source.lines().nth(loc.line - 1)` is the referenced line.
@@ -337,6 +339,17 @@ impl<M: Metrics> Location<M> {
 
     pub fn get(&self, source: &str) -> Option<char> {
         M::get(self, source)
+    }
+}
+
+impl<M: Metrics> Default for Location<M> {
+    fn default() -> Self {
+        Self {
+            line: 1,
+            column: 1,
+            absolute: 0,
+            metrics: Default::default(),
+        }
     }
 }
 
