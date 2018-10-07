@@ -508,7 +508,7 @@ impl<T> Debug for TokenMeta<T> where T: Debug {
 
 #[derive(Debug)]
 pub struct Error<'a, M> where M: Metrics {
-    pub file: &'a str,
+    pub filename: &'a str,
     pub span: Span<M>,
     pub source: &'a str,
     pub rest: &'a str,
@@ -518,7 +518,7 @@ pub struct Error<'a, M> where M: Metrics {
 impl<'a, M> fmt::Display for Error<'a, M> where M: Metrics {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
         writeln!(f, "Error at {}:{}:{}",
-                 self.file,
+                 self.filename,
                  self.span.start.line,
                  self.span.start.column,
         )?;
@@ -664,7 +664,7 @@ mod test {
     #[test]
     fn test_error() {
         let error = Error {
-            file: "<stdin>",
+            filename: "<stdin>",
             span: NUMBERS_BYTES_SPAN,
             source: NUMBERS,
             rest: "",
