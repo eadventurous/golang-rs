@@ -511,7 +511,7 @@ mod test {
     fn test_white_space() {
         let lexer = make_lexer();
         let source = " \t\n42\n";
-        let tokens = lexer.tokens(source).collect::<Vec<_>>();
+        let tokens = lexer.into_tokens(source).collect::<Vec<_>>();
 
         assert!(tokens.iter().all(Result::is_ok));
         assert_eq!(tokens.into_iter().map(Result::unwrap).collect::<Vec<_>>(), vec![Literal(GoLiteral::Integer("42"))]);

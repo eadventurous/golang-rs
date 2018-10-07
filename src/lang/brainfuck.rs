@@ -42,7 +42,7 @@ mod test {
     fn brainfuck() {
         let source = &r#"++L[>+<-].End"#[..];
 
-        let tokens = make_lexer().tokens(source).filter_map(Result::ok).collect::<Vec<_>>();
+        let tokens = make_lexer().into_tokens(source).filter_map(Result::ok).collect::<Vec<_>>();
         assert_eq!(tokens, vec![Inc, Inc, Comment("L"), Cond, Right, Inc, Left, Dec, Loop, Output, Comment("End")]);
     }
 }
