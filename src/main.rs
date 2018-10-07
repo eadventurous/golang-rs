@@ -1,9 +1,13 @@
 extern crate regex;
+extern crate ndarray;
 
 pub mod lang;
 pub mod lex;
+pub mod syn;
 
 use lex::{Lexer, Token};
+use syn::bnf;
+use syn::predictive_parser;
 
 use std::io::Read;
 
