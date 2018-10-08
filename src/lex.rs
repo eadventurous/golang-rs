@@ -112,6 +112,14 @@ pub struct LexerResult<T> {
     pub t: T,
 }
 
+pub type MetaResult<'a, T> = Result<TokenMeta<T>, Error<'a, Bytes>>;
+
+pub trait MetaIter<'a, T> : Iterator<Item=MetaResult<'a, T>> {}
+
+impl<'a, T, I> MetaIter<'a, T> for I
+    where T: Token<'a>,
+          I: Iterator<Item=MetaResult<'a, T>> {}
+
 /// Iterator over token stream, based on types `Lexer` and `Token`.
 ///
 /// Engine which uses lexer to split source code into lexemes.
@@ -151,7 +159,7 @@ impl<'a, T: Token<'a>> Tokens<'a, T> {
 
 impl<'a, T> Iterator for Tokens<'a, T>
     where T: Token<'a> {
-    type Item = Result<TokenMeta<T>, Error<'a, Bytes>>;
+    type Item = MetaResult<'a, T>;
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         if self.error {

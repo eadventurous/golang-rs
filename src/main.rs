@@ -1,14 +1,13 @@
 extern crate regex;
 
+use lex::{MetaIter, Token};
+use std::io::Read;
+
 pub mod lang;
 pub mod lex;
 
-use lex::{Token, Tokens};
-
-use std::io::Read;
-
 /// Fancy tokens printer.
-pub fn print_tokens<'a, T: Token<'a>>(tokens: Tokens<'a, T>) {
+pub fn print_tokens<'a, T: Token<'a>, I: MetaIter<'a, T>>(tokens: I) {
     println!("Tokens:");
     for (i, t) in tokens.enumerate() {
         match t {
