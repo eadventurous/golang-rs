@@ -205,11 +205,32 @@ pub trait Metrics: Copy + Clone + Debug + Default + Ord + PartialOrd + Eq + Part
     fn len(string: &str) -> usize;
     fn get(location: &Location<Self>, string: &str) -> Option<char>;
     fn slice<'a>(span: &Span<Self>, string: &'a str) -> &'a str;
-    fn location(string: &str, absolute: usize) -> Location<Self>;
+    fn location_add(location: Location<Self>, s: &str) -> Location<Self>;
+    fn location(string: &str, absolute: usize) -> Location<Self> {
+        if absolute >= Self::len(string) {
+            panic!("absolute position >= length of string");
+        }
+
+        assert!(Self::len(string) > 0);
+
+        // Breaking the invariant of column >= 1, but it's OK because string is non-empty.
+        // Also `absolute` should be -1 for this case, but it is usize, so instead we will fix it later.
+        let mut location = Location { line: 1, column: 0, absolute: 0, was_newline: false, metrics: Default::default() };
+        location += &string[..absolute + 1];
+        location.absolute -= 1;
+        location
+    }
 }
 
 #[derive(Copy, Clone, Debug, Default, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Bytes;
+
+impl Bytes {
+    fn is_newline(c: u8) -> bool {
+        return c == 0x0d  // carriage returns (U+000D)
+            || c == 0x0a; // newlines (U+000A)
+    }
+}
 
 impl Metrics for Bytes {
     fn len(string: &str) -> usize {
@@ -228,30 +249,32 @@ impl Metrics for Bytes {
         &string[span.start.absolute..=span.end.absolute]
     }
 
-    fn location(string: &str, absolute: usize) -> Location<Self> {
-        let mut line = 1;
-        let mut column = 1;
-
-        fn is_newline(c: u8) -> bool {
-            return c == 0x0d  // carriage returns (U+000D)
-                || c == 0x0a; // newlines (U+000A)
-        }
-
-        for c in string.bytes().take(absolute) {
-            if is_newline(c) {
-                line += 1;
-                column = 1;
+    fn location_add(mut location: Location<Self>, s: &str) -> Location<Self> {
+        // newline character counts as a part of its preceding line.
+        for c in s.bytes() {
+            if location.was_newline {
+                location.line += 1;
+                location.column = 1;
             } else {
-                column += 1;
+                location.column += 1;
             }
+            location.was_newline = Self::is_newline(c);
         }
-
-        Location { line, column, absolute, ..Default::default() }
+        location.absolute += s.bytes().count();
+        location
     }
 }
 
 #[derive(Copy, Clone, Debug, Default, Ord, PartialOrd, Eq, PartialEq)]
 pub struct Chars;
+
+impl Chars {
+    fn is_newline(c: char) -> bool {
+        let c = c as u8;
+        return c == 0x0d  // carriage returns (U+000D)
+            || c == 0x0a; // newlines (U+000A)
+    }
+}
 
 impl Metrics for Chars {
     fn len(string: &str) -> usize {
@@ -270,26 +293,19 @@ impl Metrics for Chars {
 
         &string[skip..skip + take]
     }
-    fn location(string: &str, absolute: usize) -> Location<Self> {
-        let mut line = 1;
-        let mut column = 1;
 
-        fn is_newline(c: char) -> bool {
-            let c = c as u8;
-            return c == 0x0d  // carriage returns (U+000D)
-                || c == 0x0a; // newlines (U+000A)
-        }
-
-        for c in string.chars().take(absolute) {
-            if is_newline(c) {
-                line += 1;
-                column = 1;
+    fn location_add(mut location: Location<Self>, s: &str) -> Location<Self> {
+        for c in s.chars() {
+            if location.was_newline {
+                location.line += 1;
+                location.column = 1;
             } else {
-                column += 1;
+                location.column += 1;
             }
+            location.absolute += 1;
+            location.was_newline = Chars::is_newline(c);
         }
-
-        Location { line, column, absolute, ..Default::default() }
+        location
     }
 }
 
@@ -305,6 +321,8 @@ pub struct Location<M: Metrics> {
     /// Absolute position of byte/character in source file starting from 0.
     /// Such that `source.chars().nth(loc.absolute)` is the references byte/character.
     pub absolute: usize,
+    /// Was the last character a newline?
+    pub was_newline: bool,
     /// Metrics marker
     pub metrics: M,
 //    _marker: PhantomData<M>,
@@ -330,10 +348,6 @@ impl<M: Metrics> Location<M> {
     ///
     /// If absolute position is greater or equal to length of string (according to `Metrics`).
     pub fn from(string: &str, absolute: usize) -> Self {
-        if absolute >= M::len(string) {
-            panic!("absolute position >= length of string");
-        }
-
         M::location(string, absolute)
     }
 
@@ -348,6 +362,7 @@ impl<M: Metrics> Default for Location<M> {
             line: 1,
             column: 1,
             absolute: 0,
+            was_newline: false,
             metrics: Default::default(),
         }
     }
@@ -370,6 +385,20 @@ impl<M: Metrics> PartialOrd for Location<M> {
 impl<M: Metrics> Ord for Location<M> {
     fn cmp(&self, other: &Location<M>) -> Ordering {
         self.absolute.cmp(&other.absolute)
+    }
+}
+
+impl<M: Metrics, S: AsRef<str>> ::std::ops::Add<S> for Location<M> {
+    type Output = Location<M>;
+
+    fn add(self, rhs: S) -> <Self as ::std::ops::Add<S>>::Output {
+        M::location_add(self, rhs.as_ref())
+    }
+}
+
+impl<M: Metrics, S: AsRef<str>> ::std::ops::AddAssign<S> for Location<M> {
+    fn add_assign(&mut self, rhs: S) {
+        *self = M::location_add(*self, rhs.as_ref());
     }
 }
 
@@ -550,8 +579,8 @@ mod test {
 
     const SOURCE: &str = "line one\nline two";
     const ONE_LINE_BYTES_SPAN: Span<Bytes> = Span {
-        start: Location { line: 1, column: 6, absolute: 5, metrics: Bytes },
-        end: Location { line: 2, column: 4, absolute: 12, metrics: Bytes },
+        start: Location { line: 1, column: 6, absolute: 5, was_newline: false, metrics: Bytes },
+        end: Location { line: 2, column: 4, absolute: 12, was_newline: false, metrics: Bytes },
     };
 
     #[test]
@@ -578,10 +607,29 @@ mod test {
         assert_eq!(5, loc.absolute);
 
         // 'n'
-        let loc = Location::<Bytes>::from(SOURCE, 11);
+        let loc = Location::<Bytes>::from(SOURCE, 12);
         assert_eq!(2, loc.line);
-        assert_eq!(3, loc.column);
+        assert_eq!(4, loc.column);
+        assert_eq!(12, loc.absolute);
+    }
+
+    #[test]
+    fn test_location_add() {
+        const S: &str = "hello\nworld";
+        let mut loc = Location::<Bytes>::from(S, S.len() - 1);
+        assert_eq!(2, loc.line);
+        assert_eq!(5, loc.column);
+        assert_eq!(10, loc.absolute);
+
+        loc += "\n";
+        assert_eq!(2, loc.line);
+        assert_eq!(6, loc.column);
         assert_eq!(11, loc.absolute);
+
+        loc += "abc";
+        assert_eq!(3, loc.line);
+        assert_eq!(3, loc.column);
+        assert_eq!(14, loc.absolute);
     }
 
     #[test]
@@ -637,12 +685,14 @@ mod test {
             line: 2,
             column: 5,
             absolute: 8,
+            was_newline: false,
             metrics: Bytes,
         },
         end: Location {
             line: 5,
             column: 7,
             absolute: 29,
+            was_newline: false,
             metrics: Bytes,
         },
     };
