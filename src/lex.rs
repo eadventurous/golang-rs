@@ -645,7 +645,19 @@ mod test {
     }
 
     #[test]
-    fn test_location_add_empty() {
+    fn test_location_add_empty_str() {
+        let mut loc = Location::<Bytes>::default();
+        assert!(loc.is_none());
+
+        loc += "";
+        assert!(loc.is_none());
+
+        loc += "x";
+        assert!(!loc.is_none());
+    }
+
+    #[test]
+    fn test_location_add_to_empty() {
         let loc = Location::<Bytes>::default();
         assert!(loc.is_none());
 
