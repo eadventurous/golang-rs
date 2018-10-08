@@ -1,8 +1,9 @@
 use ndarray::Array2;
 use std::collections::HashMap;
 use syn::bnf::*;
+use lex::{Token};
 
-pub fn construct_table<'a>(
+fn construct_table<'a>(
     grammar: &'a Grammar,
 ) -> (
     Array2<Option<GrammarProduction<'a>>>,
@@ -46,4 +47,33 @@ pub fn construct_table<'a>(
         }
     }
     (table, symbol_map)
+}
+
+pub fn parse_tokens<'a, 'b, T: Token<'b>>(grammar: &'a Grammar, start_symbol: GrammarSymbol, tokens: Vec<T>){
+    let (table, symbol_map) = construct_table(grammar);
+    let mut iter = tokens.iter();
+    let mut stack: Vec<GrammarSymbol> = Vec::new();
+    stack.push(start_symbol);
+    let mut input = iter.next().unwrap().describe();
+    while !stack.is_empty() {
+        if *stack.last().unwrap() == GrammarSymbol::Terminal(&input) {
+            stack.pop();
+            input = iter.next().unwrap().describe();
+        } else if let Terminal(_) = *stack.last().unwrap() {
+            panic!("Terminal encountered but nonterminal expected.")
+        } else {
+            let i = symbol_map.get(stack.last().unwrap()).unwrap();
+            let j = symbol_map.get(&GrammarSymbol::Terminal(&input)).unwrap();
+            match table[[*i, *j]] {
+                None => panic!("Empty parse table entry."),
+                Some(ref prod) => {
+                    println!("{:?}", prod);
+                    stack.pop();
+                    for symbol in prod.1.iter().rev() {
+                        stack.push(*symbol);
+                    }
+                }
+            }
+        }
+    }
 }

@@ -4,7 +4,7 @@ pub enum GrammarSymbol<'a> {
     Nonterminal(&'a str),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct GrammarProduction<'a> (pub GrammarSymbol<'a>, pub Vec<GrammarSymbol<'a>>);
 
 pub struct GrammarRule<'a, 'b> {
