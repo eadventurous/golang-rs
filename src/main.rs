@@ -7,11 +7,6 @@ use lex::{Token, Tokens};
 
 use std::io::Read;
 
-/// Little helper for tests.
-pub fn token<'a, T: Token<'a>>(x: Option<Result<(&'a str, T), ()>>) -> T {
-    x.unwrap().unwrap().1
-}
-
 /// Fancy tokens printer.
 pub fn print_tokens<'a, T: Token<'a>>(tokens: Tokens<'a, T>) {
     println!("Tokens:");

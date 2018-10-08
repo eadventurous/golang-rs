@@ -1,2 +1,2 @@
 pub mod brainfuck;
-//pub mod golang;
+pub mod golang;

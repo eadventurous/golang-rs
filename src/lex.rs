@@ -144,6 +144,14 @@ impl<'a, T: Token<'a>> Tokens<'a, T> {
             location: Location { column: 1, ..Default::default() },
         }
     }
+
+    /// Helper for tests.
+    pub fn into_raw(self) -> impl Iterator<Item=Result<T, Error<'a, Bytes>>> {
+        self.map(|result| match result {
+            Ok(meta) => Ok(meta.token),
+            Err(e) => Err(e),
+        })
+    }
 }
 
 
@@ -630,6 +638,16 @@ impl<'a, M> fmt::Display for Error<'a, M> where M: Metrics {
     }
 }
 
+/// Little helper for tests.
+#[cfg(test)]
+pub fn token<'a, T: Token<'a>>(x: Option<Result<TokenMeta<T>, Error<'a, Bytes>>>) -> T {
+    x.unwrap().unwrap().token
+}
+
+#[cfg(test)]
+pub fn next<'a, T: Token<'a>>(lexer: &Lexer<'a, T>, source: &'a str) -> Option<Result<TokenMeta<T>, Error<'a, Bytes>>> {
+    lexer.tokens(source).next()
+}
 
 #[cfg(test)]
 mod test {

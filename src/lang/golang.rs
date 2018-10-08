@@ -345,7 +345,19 @@ impl<'a> Token<'a> for GoToken<'a> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use ::token;
+    use ::lex::{token, next};
+
+
+    macro_rules! must_not_match_token {
+        ($lexer:expr, $source:expr, $tok:pat) => {
+            match $lexer.tokens($source).next() {
+                Some(Ok($crate::lex::TokenMeta { token: $tok, .. })) => panic!("Token must not match!"),
+                _ => {},
+            }
+        };
+    }
+
+
 
     #[test]
     fn test_id() {
@@ -365,14 +377,11 @@ mod test {
             r".a",        // illegal: can't start with dot
         ];
         for id in valid_id.into_iter() {
-            assert_eq!(token(lexer.next(id)),
+            assert_eq!(token(next(&lexer, id)),
                        GoToken::Ident(&id));
         }
         for id in illegal_id.into_iter() {
-            match lexer.next(id) {
-                Some(Ok((_, GoToken::Ident(_)))) => panic!(),
-                _ => {}
-            }
+            must_not_match_token!(lexer, id, GoToken::Ident(_));
         }
     }
 
@@ -399,14 +408,11 @@ mod test {
             r"i",           //illegal: can't start with i
         ];
         for imaginary in valid_imaginary.into_iter() {
-            assert_eq!(token(lexer.next(imaginary)),
+            assert_eq!(token(next(&lexer, imaginary)),
                        GoToken::Literal(GoLiteral::Imaginary(&imaginary)));
         }
         for imaginary in illegal_imaginary.into_iter() {
-            match lexer.next(imaginary) {
-                Some(Ok((_, GoToken::Literal(GoLiteral::Imaginary(_))))) => panic!(),
-                _ => {}
-            }
+            must_not_match_token!(lexer, imaginary, GoToken::Literal(GoLiteral::Imaginary(_)));
         }
     }
 
@@ -431,14 +437,11 @@ mod test {
             r"82",         // illegal: it is integer
         ];
         for float in valid_floats.into_iter() {
-            assert_eq!(token(lexer.next(float)),
+            assert_eq!(token(next(&lexer, float)),
                        GoToken::Literal(GoLiteral::Float(&float)));
         }
         for float in illegal_floats.into_iter() {
-            match lexer.next(float) {
-                Some(Ok((_, Literal(GoLiteral::Float(_))))) => panic!(),
-                _ => {}
-            }
+            must_not_match_token!(lexer, float, Literal(GoLiteral::Float(_)));
         }
     }
 
@@ -470,11 +473,11 @@ mod test {
             // r"'\U00110000'", // illegal: invalid Unicode code point
         ];
         for rune in valid_runes.into_iter() {
-            assert_eq!(token(lexer.next(rune)),
+            assert_eq!(token(next(&lexer, rune)),
                        GoToken::Literal(GoLiteral::Rune(&rune[1..rune.len() - 1])));
         }
         for rune in illegal_runes.into_iter() {
-            assert!(lexer.next(rune).unwrap().is_err());
+            assert!(lexer.tokens(rune).next().unwrap().is_err());
         }
     }
 
@@ -497,12 +500,12 @@ mod test {
         ];
 
         for s in raw_strings.into_iter() {
-            assert_eq!(token(lexer.next(s)),
+            assert_eq!(token(next(&lexer, s)),
                        GoToken::Literal(GoLiteral::RawString(&s[1..s.len() - 1])));
         }
 
         for s in interpreted_strings.into_iter() {
-            assert_eq!(token(lexer.next(s)),
+            assert_eq!(token(next(&lexer, s)),
                        GoToken::Literal(GoLiteral::InterpretedString(&s[1..s.len() - 1])));
         }
     }
@@ -511,9 +514,11 @@ mod test {
     fn test_white_space() {
         let lexer = make_lexer();
         let source = " \t\n42\n";
-        let tokens = lexer.into_tokens(source).collect::<Vec<_>>();
+        let tokens = lexer.into_tokens(source).into_raw().collect::<Vec<_>>();
 
         assert!(tokens.iter().all(Result::is_ok));
-        assert_eq!(tokens.into_iter().map(Result::unwrap).collect::<Vec<_>>(), vec![Literal(GoLiteral::Integer("42"))]);
+        assert_eq!(vec![Literal(GoLiteral::Integer("42"))], tokens.into_iter()
+                                                                  .map(Result::unwrap)
+                                                                  .collect::<Vec<_>>());
     }
 }
