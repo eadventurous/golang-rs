@@ -45,9 +45,10 @@ impl<'a, T> Lexer<'a, T>
     }
 
     /// ```raw
-    /// skip_whitespaces(source).is_empty() => None
-    /// parse(skip_whitespaces(source)).is_ok() => Some(Ok(rest, token))
-    /// parse(skip_whitespaces(source)).is_err() => Some(Err(...))
+    /// stripped.is_empty() => None
+    /// parse(stripped).is_ok() => Some(Ok(...))
+    /// parse(stripped).is_err() => Some(Err(...))
+    ///     where stripped = skip_whitespaces(source)
     /// ```
     pub fn next(&self, source: &'a str, at: Location<Bytes>) -> Option<Result<LexerResult<T>, Error<'a, Bytes>>> {
         assert!(source.len() >= at.absolute);
@@ -58,13 +59,6 @@ impl<'a, T> Lexer<'a, T>
         let whitespace_len = src.len() - without_whitespace.len();
         let whitespace = &src[..whitespace_len];
 
-        /// ```
-        /// source = "  hello\n   world"
-        /// without_whitespace = "hello\n  world"
-        /// whitespace_len = 2
-        /// whitespace = &src[..2]  // &[src[0], src[1]] == "  "
-        ///
-        /// ```
         let at_token = at + whitespace;
         let whitespace_span = if whitespace.is_empty() { None } else { Some(Span { start: at, end: at_token }) };
 
@@ -93,15 +87,16 @@ impl<'a, T> Lexer<'a, T>
                     })
                     // type: (&str, T)
                     .map(|(token, t)| {
+                        let end = at_token + token;
                         let token_span = Span {
                             start: at + whitespace,
-                            end: at_token + token,
+                            end,
                         };
 
                         LexerResult {
                             whitespace: whitespace_span,
                             token: token_span,
-                            location: at_token + token,
+                            location: end,
                             t,
                         }
                     }))
@@ -116,7 +111,6 @@ pub struct LexerResult<T> {
     pub location: Location<Bytes>,
     pub t: T,
 }
-// Span<Bytes>, Span<Bytes>, &'a str, TokenMeta<T>
 
 /// Iterator over token stream, based on types `Lexer` and `Token`.
 ///
@@ -379,7 +373,6 @@ pub struct Location<M: Metrics> {
     pub was_newline: bool,
     /// Metrics marker
     pub metrics: M,
-//    _marker: PhantomData<M>,
 }
 
 impl<M: Metrics> Location<M> {

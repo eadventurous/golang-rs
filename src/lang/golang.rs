@@ -477,7 +477,7 @@ mod test {
                        GoToken::Literal(GoLiteral::Rune(&rune[1..rune.len() - 1])));
         }
         for rune in illegal_runes.into_iter() {
-            assert!(lexer.tokens(rune).next().unwrap().is_err());
+            assert!(next(&lexer, rune).unwrap().is_err());
         }
     }
 
