@@ -49,34 +49,74 @@ impl<'a, T> Lexer<'a, T>
     /// parse(skip_whitespaces(source)).is_ok() => Some(Ok(rest, token))
     /// parse(skip_whitespaces(source)).is_err() => Some(Err(...))
     /// ```
-    pub fn next(&self, source: &'a str) -> Option<Result<(&'a str, T), ()>> {
-        // prepare source string
-        let source = (self.skip_whitespaces)(source);
+    pub fn next(&self, source: &'a str, at: Location<Bytes>) -> Option<Result<LexerResult<T>, Error<'a, Bytes>>> {
+        assert!(source.len() >= at.absolute);
+        let src = &source[at.absolute..];
 
-        if source.is_empty() { return None; }
+        let without_whitespace = (self.skip_whitespaces)(src);
+        assert!(src.len() >= without_whitespace.len());
+        let whitespace_len = src.len() - without_whitespace.len();
+        let whitespace = &src[..whitespace_len];
 
-        Some(self._next(source))
-    }
+        /// ```
+        /// source = "  hello\n   world"
+        /// without_whitespace = "hello\n  world"
+        /// whitespace_len = 2
+        /// whitespace = &src[..2]  // &[src[0], src[1]] == "  "
+        ///
+        /// ```
+        let at_token = at + whitespace;
+        let whitespace_span = if whitespace.is_empty() { None } else { Some(Span { start: at, end: at_token }) };
 
-    fn _next(&self, source: &'a str) -> Result<(&'a str, T), ()> {
-        let (len, token) =
-            self.pairs.iter()
-                // apply regex AND skip mismatches in one shot
-                .filter_map(|&(ref regex, ref f)| {
-                    regex
-                        .captures(source)
-                        .map(|c| (c, f))
-                }) // type: Iterator<Item=(Captures<'a>, &Box<TokenFactory<T>>)>
-                // apply token factory to the captures object
-                .map(|(c, f)| (c.get(0).unwrap().as_str().len(), f.token(c)))
-                // take the first one that matches
-                .next()
-                // early return `Err` if empty
-                .ok_or(())?;
-        let rest = &source[len..];
-        Ok((rest, token))
+        if without_whitespace.is_empty() {
+            None
+        } else {
+            Some(
+                self.pairs.iter()
+                    // apply regex AND skip mismatches in one shot
+                    .filter_map(|&(ref regex, ref f)| {
+                        regex
+                            .captures(without_whitespace)
+                            .map(|c| (c, f))
+                    }) // type: Iterator<Item=(Captures<'a>, &Box<TokenFactory<T>>)>
+                    // apply token factory to the captures object
+                    .map(|(c, f)| (c.get(0).unwrap().as_str(), f.token(c)))
+                    // take the first one that matches
+                    .next()
+                    // early return `Err` if empty
+                    .ok_or_else(|| Error {
+                        filename: "",
+                        span: Span { start: at, end: at },
+                        source,
+                        rest: without_whitespace,
+                        description: Some("No token could be matched".to_owned()),
+                    })
+                    // type: (&str, T)
+                    .map(|(token, t)| {
+                        let token_span = Span {
+                            start: at + whitespace,
+                            end: at_token + token,
+                        };
+
+                        LexerResult {
+                            whitespace: whitespace_span,
+                            token: token_span,
+                            location: at_token + token,
+                            t,
+                        }
+                    }))
+        }
     }
 }
+
+pub struct LexerResult<T> {
+    #[allow(dead_code)]
+    pub whitespace: Option<Span<Bytes>>,
+    pub token: Span<Bytes>,
+    pub location: Location<Bytes>,
+    pub t: T,
+}
+// Span<Bytes>, Span<Bytes>, &'a str, TokenMeta<T>
 
 /// Iterator over token stream, based on types `Lexer` and `Token`.
 ///
@@ -90,6 +130,8 @@ pub struct Tokens<'a, T> {
     lexer: Lexer<'a, T>,
     source: &'a str,
     error: bool,
+    /// Next location that lexer should start parsing from, or if the
+    /// `location.is_none()` than lexer will start from the beginning.
     location: Location<Bytes>,
 }
 
@@ -99,7 +141,7 @@ impl<'a, T: Token<'a>> Tokens<'a, T> {
             lexer,
             source,
             error: false,
-            location: Default::default(),
+            location: Location { column: 1, ..Default::default() },
         }
     }
 }
@@ -107,22 +149,26 @@ impl<'a, T: Token<'a>> Tokens<'a, T> {
 
 impl<'a, T> Iterator for Tokens<'a, T>
     where T: Token<'a> {
-    type Item = Result<T, &'a str>;
+    type Item = Result<TokenMeta<T>, Error<'a, Bytes>>;
 
-    fn next(&mut self) -> Option<Result<T, &'a str>> {
-        match self.error {
-            false => match self.lexer.next(self.source) {
-                Some(Ok((rest, token))) => {
-                    self.source = rest;
-                    Some(Ok(token))
+    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+        if self.error {
+            None
+        } else {
+            match self.lexer.next(self.source, self.location) {
+                Some(Ok(LexerResult { token, location, t, .. })) => {
+                    self.location = location;
+                    Some(Ok(TokenMeta { span: token, token: t }))
                 }
-                Some(Err(_)) => {
-                    self.error = false;
-                    Some(Err(self.source))
+                Some(Err(error)) => {
+                    self.error = true;
+                    Some(Err(error))
                 }
-                None => None
+                None => {
+                    self.error = true;
+                    None
+                }
             }
-            true => None
         }
     }
 }
