@@ -69,6 +69,7 @@ impl<'a> Token<'a> for BnfToken<'a> {
 impl<'a, 'b> GrammarRule<'a, 'b> {
     fn from_str(s: &str) -> GrammarRule {
         let lexer = make_lexer();
+        println!("{}", s);
         let tokens = engine(&lexer, s).unwrap();
         let mut tokens_iter = tokens.iter();
         let name = match tokens_iter.next().unwrap() {
@@ -109,8 +110,8 @@ pub use self::GrammarSymbol::*;
 impl<'a, 'b> Grammar<'a, 'b> {
     pub fn from_str(s: &str) -> Grammar {
         let mut rules = Vec::new();
-        for _ in s.lines() {
-            rules.push(GrammarRule::from_str(s));
+        for line in s.lines() {
+            rules.push(GrammarRule::from_str(line));
         }
         Grammar { rules }
     }
@@ -155,14 +156,14 @@ impl<'a, 'b> Grammar<'a, 'b> {
                         for symbol in prod.iter() {
                             let s_first = self.first(vec![*symbol]);
                             for a in s_first.iter() {
-                                if *a != "" {
+                                if *a != "" && !set.contains(a) {
                                     set.push(a);
                                 }
                             }
-                            count += 1;
                             if !s_first.contains(&"") {
                                 break;
                             }
+                            count += 1;
                         }
                         //if first(Y[j]) for j in 1..k contains "empty", then add it to the first(X)
                         if count == prod.len() {
@@ -230,5 +231,14 @@ mod test {
                 ]
             ]
         );
+    }
+
+     #[test]
+    fn test_first_set() {
+        let source = &r#"<S> ::= "c"<A>"d" | <A>
+                        <A> ::= "a""b" | "a" "#[..];
+        let grammar = Grammar::from_str(source);
+        assert_eq!(grammar.first(vec![Nonterminal("A")]), vec!["a"]);
+        assert_eq!(grammar.first(vec![Nonterminal("S")]), vec!["c", "a"]);
     }
 }
