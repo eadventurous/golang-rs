@@ -210,15 +210,11 @@ pub trait Metrics: Copy + Clone + Debug + Default + Ord + PartialOrd + Eq + Part
         if absolute >= Self::len(string) {
             panic!("absolute position >= length of string");
         }
-
         assert!(Self::len(string) > 0);
 
         // Breaking the invariant of column >= 1, but it's OK because string is non-empty.
         // Also `absolute` should be -1 for this case, but it is usize, so instead we will fix it later.
-        let mut location = Location { line: 1, column: 0, absolute: 0, was_newline: false, metrics: Default::default() };
-        location += &string[..absolute + 1];
-        location.absolute -= 1;
-        location
+        Location::default() + &string[..absolute + 1]
     }
 }
 
@@ -250,6 +246,7 @@ impl Metrics for Bytes {
     }
 
     fn location_add(mut location: Location<Self>, s: &str) -> Location<Self> {
+        let was_none = location.is_none();
         // newline character counts as a part of its preceding line.
         for c in s.bytes() {
             if location.was_newline {
@@ -261,6 +258,7 @@ impl Metrics for Bytes {
             location.was_newline = Self::is_newline(c);
         }
         location.absolute += s.bytes().count();
+        if was_none && location.absolute > 0 { location.absolute -= 1; }
         location
     }
 }
@@ -295,6 +293,7 @@ impl Metrics for Chars {
     }
 
     fn location_add(mut location: Location<Self>, s: &str) -> Location<Self> {
+        let was_none = location.is_none();
         for c in s.chars() {
             if location.was_newline {
                 location.line += 1;
@@ -305,6 +304,7 @@ impl Metrics for Chars {
             location.absolute += 1;
             location.was_newline = Chars::is_newline(c);
         }
+        if was_none && location.absolute > 0 { location.absolute -= 1; }
         location
     }
 }
@@ -337,9 +337,12 @@ impl<M: Metrics> Location<M> {
     ///
     pub fn new(line: usize, column: usize, absolute: usize) -> Self {
         assert!(line >= 1);
-        assert!(column >= 1);
 
         Self { line, column, absolute, ..Default::default() }
+    }
+
+    pub fn is_none(&self) -> bool {
+        self.absolute == 0 && self.column == 0
     }
 
     /// Location of character addressed by absolute position in source `string`.
@@ -357,10 +360,19 @@ impl<M: Metrics> Location<M> {
 }
 
 impl<M: Metrics> Default for Location<M> {
+    /// Default location is located at first line, one character before the beginning, i.e. at phantom character 0.
+    /// So that default location could be used to append strings to it like this:
+    ///
+    /// ```rust
+    /// let mut loc = Location::<Bytes>::default();
+    /// loc += "hello\n";
+    /// loc += "world";
+    /// assert_eq!(10, loc.absolute);
+    /// ```
     fn default() -> Self {
         Self {
             line: 1,
-            column: 1,
+            column: 0,
             absolute: 0,
             was_newline: false,
             metrics: Default::default(),
@@ -616,20 +628,55 @@ mod test {
     #[test]
     fn test_location_add() {
         const S: &str = "hello\nworld";
-        let mut loc = Location::<Bytes>::from(S, S.len() - 1);
+        let loc = Location::<Bytes>::from(S, S.len() - 1);
         assert_eq!(2, loc.line);
         assert_eq!(5, loc.column);
         assert_eq!(10, loc.absolute);
 
-        loc += "\n";
+        let loc = loc + "\n";
         assert_eq!(2, loc.line);
         assert_eq!(6, loc.column);
         assert_eq!(11, loc.absolute);
 
-        loc += "abc";
+        let loc = loc + "abc";
         assert_eq!(3, loc.line);
         assert_eq!(3, loc.column);
         assert_eq!(14, loc.absolute);
+    }
+
+    #[test]
+    fn test_location_add_empty() {
+        let loc = Location::<Bytes>::default();
+        assert!(loc.is_none());
+
+        let loc1 = loc + "x";
+        assert!(!loc1.is_none());
+        assert_eq!(1, loc1.line);
+        assert_eq!(1, loc1.column);
+        assert_eq!(0, loc1.absolute);
+
+        let loc2 = loc + "hello\nworld";
+        assert!(!loc2.is_none());
+        assert_eq!(2, loc2.line);
+        assert_eq!(5, loc2.column);
+        assert_eq!(10, loc2.absolute);
+
+        let loc3 = loc2 + "\nfoobar";
+        assert!(!loc3.is_none());
+        assert_eq!(3, loc3.line);
+        assert_eq!(6, loc3.column);
+        assert_eq!(17, loc3.absolute);
+    }
+
+    #[test]
+    fn test_location_add_assign() {
+        let mut loc = Location::<Bytes>::default();
+        loc += "hello\n";
+        loc += "world";
+        assert!(!loc.is_none());
+        assert_eq!(2, loc.line);
+        assert_eq!(5, loc.column);
+        assert_eq!(10, loc.absolute);
     }
 
     #[test]
