@@ -1,3 +1,6 @@
+use engine;
+use lex::{Lexer, LexerBuilder, Token};
+
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum GrammarSymbol<'a> {
     Terminal(&'a str),
@@ -5,20 +8,95 @@ pub enum GrammarSymbol<'a> {
 }
 
 #[derive(Clone, Debug)]
-pub struct GrammarProduction<'a> (pub GrammarSymbol<'a>, pub Vec<GrammarSymbol<'a>>);
+pub struct GrammarProduction<'a>(pub GrammarSymbol<'a>, pub Vec<GrammarSymbol<'a>>);
 
 pub struct GrammarRule<'a, 'b> {
     pub name: &'a str,
     pub expression: Vec<Vec<GrammarSymbol<'b>>>,
 }
 
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
+pub enum BnfToken<'a> {
+    Terminal(&'a str),
+    Nonterminal(&'a str),
+    Operator(BnfOperator),
+}
+
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
+pub enum BnfOperator {
+    // "::="
+    Equals,
+    //Alternative "|"
+    Alt,
+}
+
+fn is_whitespace(c: char) -> bool {
+    let c = c as u8;
+    return c == 0x20 // spaces (U+0020)
+        || c == 0x09 // horizontal tabs (U+0009)
+        || c == 0x0d // carriage returns (U+000D)
+        || c == 0x0a; // newlines (U+000A)
+}
+
+fn whitespace_filter(source: &str) -> &str {
+    for (i, c) in source.char_indices() {
+        if !is_whitespace(c) {
+            return &source[i..];
+        }
+    }
+    &source[source.len()..]
+}
+
+pub fn make_lexer<'a>() -> Lexer<'a, BnfToken<'a>> {
+    let constant = |x| move |_| x;
+    LexerBuilder::new()
+        .skip_whitespaces(whitespace_filter)
+        .add(r"::=", constant(BnfToken::Operator(BnfOperator::Equals)))
+        .add(r"\|", constant(BnfToken::Operator(BnfOperator::Alt)))
+        .add(r"<.+?>", |c| {
+            BnfToken::Nonterminal(c.get(0).unwrap().as_str())
+        }).add("\".*?\"", |c| {
+            BnfToken::Terminal(c.get(0).unwrap().as_str())
+        }).build()
+}
+
+impl<'a> Token<'a> for BnfToken<'a> {
+    fn describe(&self) -> String {
+        format!("{:?}", self)
+    }
+}
+
 impl<'a, 'b> GrammarRule<'a, 'b> {
     fn from_str(s: &str) -> GrammarRule {
-        //TODO: parse string
-        GrammarRule {
-            name: "name",
-            expression: vec![],
+        let lexer = make_lexer();
+        let tokens = engine(&lexer, s).unwrap();
+        let mut tokens_iter = tokens.iter();
+        let name = match tokens_iter.next().unwrap() {
+            BnfToken::Nonterminal(s) => &s[1..(s.len() - 1)],
+            _ => panic!("Nonterminal expected at the start of the rule."),
+        };
+        match tokens_iter.next().unwrap() {
+            BnfToken::Operator(BnfOperator::Equals) => {}
+            _ => panic!("Equals sign expected at after the first nonterminal."),
+        };
+        let mut expression: Vec<Vec<GrammarSymbol>> = Vec::new();
+        let mut prod: Vec<GrammarSymbol> = Vec::new();
+        for token in tokens_iter {
+            println!("{:?}", token);
+            match token {
+                BnfToken::Nonterminal(s) => prod.push(Nonterminal(&s[1..(s.len() - 1)])),
+                BnfToken::Terminal(s) => prod.push(Terminal(&s[1..(s.len() - 1)])),
+                BnfToken::Operator(BnfOperator::Alt) => {
+                    expression.push(prod);
+                    prod = Vec::new();
+                }
+                _ => panic!("Unexpected token in the expression part."),
+            }
         }
+        if !prod.is_empty() {
+            expression.push(prod);
+        }
+        GrammarRule { name, expression }
     }
 }
 
@@ -122,5 +200,35 @@ impl<'a, 'b> Grammar<'a, 'b> {
             }
         }
         terminals
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use engine;
+
+    #[test]
+    fn test_bnf_parsing_rule_name() {
+        let source = &r#"<opt-suffix-part> ::= "Sr." | "Jr." | <roman-numeral> | """#[..];
+        let rule = GrammarRule::from_str(source);
+        assert_eq!(rule.name, "opt-suffix-part");
+    }
+
+    #[test]
+    fn test_bnf_parsing_expr() {
+        let source = &r#"<opt-suffix-part> ::= "Sr." | "Jr." <roman-numeral> """#[..];
+        let rule = GrammarRule::from_str(source);
+        assert_eq!(
+            rule.expression,
+            vec![
+                vec![GrammarSymbol::Terminal("Sr.")],
+                vec![
+                    GrammarSymbol::Terminal("Jr."),
+                    GrammarSymbol::Nonterminal("roman-numeral"),
+                    GrammarSymbol::Terminal("")
+                ]
+            ]
+        );
     }
 }

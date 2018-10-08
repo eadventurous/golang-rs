@@ -59,7 +59,7 @@ pub fn parse_tokens<'a, 'b, T: Token<'b>>(grammar: &'a Grammar, start_symbol: Gr
         if *stack.last().unwrap() == GrammarSymbol::Terminal(&input) {
             stack.pop();
             input = iter.next().unwrap().describe();
-        } else if let Terminal(_) = *stack.last().unwrap() {
+        } else if let GrammarSymbol::Terminal(_) = *stack.last().unwrap() {
             panic!("Terminal encountered but nonterminal expected.")
         } else {
             let i = symbol_map.get(stack.last().unwrap()).unwrap();
