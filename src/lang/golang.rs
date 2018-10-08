@@ -1,5 +1,4 @@
-use lex::{Lexer, LexerBuilder, Token};
-
+use lex::{Lexer, LexerBuilder, MetaResult, Token, TokenMeta};
 pub use self::GoToken::*;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
@@ -342,10 +341,46 @@ impl<'a> Token<'a> for GoToken<'a> {
     }
 }
 
+
+pub fn drop_comments<'a, I>(iter: I) -> DropComments<I>
+    where I: Iterator<Item=MetaResult<'a, GoToken<'a>>> {
+    DropComments { inner: iter }
+}
+
+pub struct DropComments<I> { inner: I }
+
+impl<'a, I> Iterator for DropComments<I>
+    where I: Iterator<Item=MetaResult<'a, GoToken<'a>>> {
+    type Item = MetaResult<'a, GoToken<'a>>;
+
+    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+        let mut next = self.inner.next();
+        while let Some(Ok(TokenMeta { token: GoToken::Comment(_), .. })) = next {
+            next = self.inner.next();
+        }
+        next
+    }
+}
+
+
+pub struct OptionalSemicolon<I> {
+    #[allow(unused)]
+    inner: I
+}
+
+impl<'a, I> Iterator for OptionalSemicolon<I>
+    where I: Iterator<Item=GoToken<'a>> {
+    type Item = MetaResult<'a, GoToken<'a>>;
+
+    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+        unimplemented!()
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use ::lex::{next, token};
     use super::*;
-    use ::lex::{token, next};
 
 
     macro_rules! must_not_match_token {

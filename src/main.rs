@@ -26,5 +26,6 @@ fn main() {
 
     let lexer = lang::golang::make_lexer();
     let tokens = lexer.into_tokens(&source);
+    let tokens = lang::golang::drop_comments(tokens);
     print_tokens(tokens);
 }
