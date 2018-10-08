@@ -117,26 +117,32 @@ impl<'a, 'b> Grammar<'a, 'b> {
     }
 
     pub fn follow(&self, token: GrammarSymbol) -> Vec<&'b str> {
-        let mut set = Vec::new();
+        let mut set: Vec<&str> = Vec::new();
         for rule in self.rules.iter() {
             for prod in rule.expression.iter() {
                 if let Some(i) = prod.iter().position(|&s| s == token) {
                     let (_, follow_symbols) = prod.split_at(i + 1);
-                    let mut has_empty = true;
-                    for follow_symbol in follow_symbols.iter() {
-                        let first_set = self.first(vec![*follow_symbol]);
-                        for a in first_set.iter() {
-                            if *a != "" {
-                                set.push(*a);
+                    let mut has_empty = false;
+                    if !follow_symbols.is_empty() {
+                        let first_beta = self.first(follow_symbols.to_vec());
+                        for e in first_beta.iter() {
+                            if e != &"" && !set.contains(e) {
+                                set.push(e);
                             }
                         }
-                        if !first_set.contains(&"") {
-                            has_empty = false;
-                            break;
+                        if first_beta.contains(&"") {
+                            has_empty = true;
                         }
+                    } else {
+                        has_empty = true;
                     }
-                    if has_empty {
-                        set.append(&mut self.follow(Nonterminal(rule.name)));
+                    if has_empty && (Nonterminal(rule.name) != token) {
+                        let follow_a = self.follow(Nonterminal(rule.name));
+                        for e in follow_a.iter() {
+                            if !set.contains(e) {
+                                set.push(e);
+                            }
+                        }
                     }
                 }
             }
@@ -147,8 +153,9 @@ impl<'a, 'b> Grammar<'a, 'b> {
     pub fn first(&self, tokens: Vec<GrammarSymbol<'b>>) -> Vec<&'b str> {
         let mut set: Vec<&str> = Vec::new();
         for token in tokens.iter() {
+            let mut x_set: Vec<&str> = Vec::new();
             match *token {
-                Terminal(s) => set.push(s),
+                Terminal(s) => x_set.push(s),
                 Nonterminal(_) => {
                     let rule = self.get_rule(token).unwrap();
                     for prod in rule.expression.iter() {
@@ -156,8 +163,8 @@ impl<'a, 'b> Grammar<'a, 'b> {
                         for symbol in prod.iter() {
                             let s_first = self.first(vec![*symbol]);
                             for a in s_first.iter() {
-                                if *a != "" && !set.contains(a) {
-                                    set.push(a);
+                                if *a != "" && !x_set.contains(a) {
+                                    x_set.push(a);
                                 }
                             }
                             if !s_first.contains(&"") {
@@ -167,11 +174,20 @@ impl<'a, 'b> Grammar<'a, 'b> {
                         }
                         //if first(Y[j]) for j in 1..k contains "empty", then add it to the first(X)
                         if count == prod.len() {
-                            set.push(&"");
+                            x_set.push(&"");
                         }
                     }
                 }
             };
+            let contains_empty = x_set.contains(&"");
+            for e in x_set.iter() {
+                if !set.contains(e) {
+                    set.push(e);
+                }
+            }
+            if !contains_empty {
+                break;
+            }
         }
         set
     }
@@ -233,12 +249,52 @@ mod test {
         );
     }
 
-     #[test]
+    #[test]
     fn test_first_set() {
-        let source = &r#"<S> ::= "c"<A>"d" | <A>
-                        <A> ::= "a""b" | "a" "#[..];
+        let source = &r#"<S> ::= "c"<A>"d" | <B><A>
+                        <A> ::= "a""b" | "a" | ""
+                        <B> ::= "" | "d" "#[..];
         let grammar = Grammar::from_str(source);
-        assert_eq!(grammar.first(vec![Nonterminal("A")]), vec!["a"]);
-        assert_eq!(grammar.first(vec![Nonterminal("S")]), vec!["c", "a"]);
+        assert_eq!(grammar.first(vec![Nonterminal("A")]), vec!["a", ""]);
+        assert_eq!(
+            grammar.first(vec![Nonterminal("S")]),
+            vec!["c", "d", "a", ""]
+        );
+    }
+
+    #[test]
+    fn test_first_set_multiple() {
+        let source = &r#"<S> ::= "c"<A>"d" | <B><A>
+                        <A> ::= "a""b" | "a" | ""
+                        <B> ::= "" | "d" "#[..];
+        let grammar = Grammar::from_str(source);
+        assert_eq!(
+            grammar.first(vec![Nonterminal("B"), Nonterminal("A")]),
+            vec!["", "d", "a"]
+        );
+    }
+
+    #[test]
+    fn test_first_set_recursive() {
+        let source = &r#"<E> ::= <T> <E'>
+                        <E'> ::= "+" <T> <E'> | ""
+                        <T> ::= <F> <T'>
+                        <T'> ::= "*" <F> <T'> | ""
+                        <F> ::= "(" <E> ")" | "id" "#[..];
+        let grammar = Grammar::from_str(source);
+        assert_eq!(grammar.first(vec![Nonterminal("E'")]), vec!["+", ""]);
+        assert_eq!(grammar.first(vec![Nonterminal("T'")]), vec!["*", ""]);
+    }
+
+    #[test]
+    fn test_follow_set() {
+        let source = &r#"<E> ::= <T> <E'>
+                        <E'> ::= "+" <T> <E'> | ""
+                        <T> ::= <F> <T'>
+                        <T'> ::= "*" <F> <T'> | ""
+                        <F> ::= "(" <E> ")" | "id" "#[..];
+        let grammar = Grammar::from_str(source);
+        assert_eq!(grammar.follow(Nonterminal("E")), vec![")"]);
+        assert_eq!(grammar.follow(Nonterminal("T")), vec!["+", ")"]);
     }
 }
