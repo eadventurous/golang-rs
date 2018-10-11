@@ -47,7 +47,7 @@ fn whitespace_filter(source: &str) -> &str {
     &source[source.len()..]
 }
 
-pub fn make_lexer<'a>() -> Lexer<'a, BnfToken<'a>> {
+fn make_lexer<'a>() -> Lexer<'a, BnfToken<'a>> {
     let constant = |x| move |_| x;
     LexerBuilder::new()
         .skip_whitespaces(whitespace_filter)
@@ -116,8 +116,11 @@ impl<'a, 'b> Grammar<'a, 'b> {
         Grammar { rules }
     }
 
-    pub fn follow(&self, token: GrammarSymbol) -> Vec<&'b str> {
+    pub fn follow(&self, token: GrammarSymbol, start_symbol: GrammarSymbol) -> Vec<&'b str> {
         let mut set: Vec<&str> = Vec::new();
+        if token == start_symbol {
+            set.push("$");
+        }
         for rule in self.rules.iter() {
             for prod in rule.expression.iter() {
                 if let Some(i) = prod.iter().position(|&s| s == token) {
@@ -137,7 +140,7 @@ impl<'a, 'b> Grammar<'a, 'b> {
                         has_empty = true;
                     }
                     if has_empty && (Nonterminal(rule.name) != token) {
-                        let follow_a = self.follow(Nonterminal(rule.name));
+                        let follow_a = self.follow(Nonterminal(rule.name), start_symbol);
                         for e in follow_a.iter() {
                             if !set.contains(e) {
                                 set.push(e);
@@ -216,6 +219,7 @@ impl<'a, 'b> Grammar<'a, 'b> {
                 }
             }
         }
+        terminals.push(&Terminal("$"));
         terminals
     }
 }
@@ -294,7 +298,7 @@ mod test {
                         <T'> ::= "*" <F> <T'> | ""
                         <F> ::= "(" <E> ")" | "id" "#[..];
         let grammar = Grammar::from_str(source);
-        assert_eq!(grammar.follow(Nonterminal("E")), vec![")"]);
-        assert_eq!(grammar.follow(Nonterminal("T")), vec!["+", ")"]);
+        assert_eq!(grammar.follow(Nonterminal("E"), Nonterminal("E")), vec!["$", ")"]);
+        assert_eq!(grammar.follow(Nonterminal("T"), Nonterminal("E")), vec!["+", "$",")"]);
     }
 }
