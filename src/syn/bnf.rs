@@ -7,6 +7,16 @@ pub enum GrammarSymbol<'a> {
     Nonterminal(&'a str),
 }
 
+impl<'a> GrammarSymbol<'a> {
+    pub fn to_str(&self) -> String{
+        let s = match self.clone() {
+            Terminal(s) => s,
+            Nonterminal(s) => s,
+        };
+        s.to_string()
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct GrammarProduction<'a>(pub GrammarSymbol<'a>, pub Vec<GrammarSymbol<'a>>);
 

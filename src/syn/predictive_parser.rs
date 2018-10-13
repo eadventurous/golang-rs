@@ -1,3 +1,5 @@
+use id_tree::InsertBehavior::*;
+use id_tree::*;
 use lex::Token;
 use ndarray::Array2;
 use std::collections::HashMap;
@@ -38,14 +40,14 @@ fn construct_table<'a>(
             if first_a.contains(&"") {
                 let follow_A = grammar.follow(GrammarSymbol::Nonterminal(rule.name), start_symbol);
                 let i = symbol_map
-                            .get(&GrammarSymbol::Nonterminal(rule.name))
-                            .unwrap();
+                    .get(&GrammarSymbol::Nonterminal(rule.name))
+                    .unwrap();
                 if follow_A.contains(&"$") {
                     let j = symbol_map.get(&GrammarSymbol::Terminal("$")).unwrap();
-                        table[[*i, *j]] = Some(GrammarProduction(
-                            GrammarSymbol::Nonterminal(rule.name),
-                            prod.clone(),
-                        ));
+                    table[[*i, *j]] = Some(GrammarProduction(
+                        GrammarSymbol::Nonterminal(rule.name),
+                        prod.clone(),
+                    ));
                 }
                 for &b in follow_A.iter() {
                     if b != "" {
@@ -64,10 +66,21 @@ fn construct_table<'a>(
 
 pub fn parse_tokens<'a, 'b>(
     grammar: &'a Grammar,
-    start_symbol: GrammarSymbol,
+    start_symbol: GrammarSymbol<'a>,
     tokens: Vec<String>,
-) {
+) -> Result<Tree<String>, &'static str> {
     let (table, symbol_map) = construct_table(grammar, start_symbol);
+
+    //construct tree
+    let mut tree: Tree<String> = TreeBuilder::new()
+        .with_node_capacity(symbol_map.len())
+        .build();
+
+    let root_str = start_symbol.to_str();
+    let root_id: NodeId = tree.insert(Node::new(root_str.clone()), AsRoot).unwrap();
+    let mut leaves = HashMap::new();
+    leaves.insert(root_str, root_id);
+
     let mut tokens = tokens.clone();
     tokens.push("$".to_string());
     let mut iter = tokens.iter();
@@ -79,29 +92,37 @@ pub fn parse_tokens<'a, 'b>(
         println!("stack: {:?}, input: {}", stack, input);
         if *stack.last().unwrap() == GrammarSymbol::Terminal(&input) {
             stack.pop();
-            if !stack.is_empty(){
+            if !stack.is_empty() {
                 input = iter.next().unwrap();
             }
         } else if let GrammarSymbol::Terminal(_) = *stack.last().unwrap() {
-            panic!("Terminal encountered but nonterminal expected.")
+            return Err("Terminal encountered but nonterminal expected.")
         } else {
             let i = symbol_map.get(stack.last().unwrap()).unwrap();
             let j = symbol_map.get(&GrammarSymbol::Terminal(&input)).unwrap();
             match table[[*i, *j]] {
-                None => panic!("Empty parse table entry."),
+                None => return Err("Empty parse table entry."),
                 Some(ref prod) => {
                     println!("{:?}", prod);
+
+                    let parent_id = leaves.get(&stack.last().unwrap().to_str()).unwrap().clone();
+                    leaves.remove(&stack.last().unwrap().to_str());
                     stack.pop();
                     for symbol in prod.1.iter().rev() {
-                        if let Terminal("") = symbol{
+                        if let Terminal("") = symbol {
                             continue;
                         }
+                        let node_id: NodeId = tree
+                            .insert(Node::new(symbol.to_str()), UnderNode(&parent_id))
+                            .unwrap();
+                        leaves.insert(symbol.to_str(), node_id);
                         stack.push(*symbol);
                     }
                 }
             }
         }
     }
+    Ok(tree)
 }
 
 #[cfg(test)]
@@ -109,7 +130,7 @@ mod test {
     use super::*;
     use engine;
     use lang::golang::*;
-    use ::print_tokens;
+    use print_tokens;
 
     #[test]
     fn test_table() {
@@ -141,6 +162,11 @@ mod test {
         let tokens = engine(&lexer, input).unwrap();
         print_tokens(tokens.clone());
         let tokens_str = tokens.iter().map(|t| t.describe()).collect();
-        parse_tokens(&grammar, Nonterminal("E"), tokens_str);
+        assert!(parse_tokens(&grammar, Nonterminal("E"), tokens_str).is_ok());
+
+        /*println!("Pre-order:");
+        for node in tree.traverse_pre_order(tree.root_node_id().unwrap()).unwrap() {
+            print!("{}, ", node.data());
+        }*/
     }
 }

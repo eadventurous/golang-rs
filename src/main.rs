@@ -1,5 +1,6 @@
 extern crate regex;
 extern crate ndarray;
+extern crate id_tree;
 
 pub mod lang;
 pub mod lex;
