@@ -78,45 +78,41 @@ pub fn parse_tokens<'a, 'b>(
 
     let root_str = start_symbol.to_str();
     let root_id: NodeId = tree.insert(Node::new(root_str.clone()), AsRoot).unwrap();
-    let mut leaves = HashMap::new();
-    leaves.insert(root_str, root_id);
 
     let mut tokens = tokens.clone();
     tokens.push("$".to_string());
     let mut iter = tokens.iter();
-    let mut stack: Vec<GrammarSymbol> = Vec::new();
-    stack.push(Terminal("$"));
-    stack.push(start_symbol);
+    let mut stack: Vec<(GrammarSymbol, NodeId)> = Vec::new();
+    stack.push((Terminal("$"), root_id.clone()));
+    stack.push((start_symbol, root_id));
     let mut input = iter.next().unwrap();
     while !stack.is_empty() {
         println!("stack: {:?}, input: {}", stack, input);
-        if *stack.last().unwrap() == GrammarSymbol::Terminal(&input) {
+        if stack.last().unwrap().0 == GrammarSymbol::Terminal(&input) {
             stack.pop();
             if !stack.is_empty() {
                 input = iter.next().unwrap();
             }
-        } else if let GrammarSymbol::Terminal(_) = *stack.last().unwrap() {
-            return Err("Terminal encountered but nonterminal expected.")
+        } else if let GrammarSymbol::Terminal(_) = stack.last().unwrap().0 {
+            return Err("Terminal encountered but nonterminal expected.");
         } else {
-            let i = symbol_map.get(stack.last().unwrap()).unwrap();
+            let i = symbol_map.get(&stack.last().unwrap().0).unwrap();
             let j = symbol_map.get(&GrammarSymbol::Terminal(&input)).unwrap();
             match table[[*i, *j]] {
                 None => return Err("Empty parse table entry."),
                 Some(ref prod) => {
                     println!("{:?}", prod);
-
-                    let parent_id = leaves.get(&stack.last().unwrap().to_str()).unwrap().clone();
-                    leaves.remove(&stack.last().unwrap().to_str());
                     stack.pop();
                     for symbol in prod.1.iter().rev() {
                         if let Terminal("") = symbol {
                             continue;
                         }
                         let node_id: NodeId = tree
-                            .insert(Node::new(symbol.to_str()), UnderNode(&parent_id))
-                            .unwrap();
-                        leaves.insert(symbol.to_str(), node_id);
-                        stack.push(*symbol);
+                            .insert(
+                                Node::new(symbol.to_str()),
+                                UnderNode(&stack.last().unwrap().1),
+                            ).unwrap();
+                        stack.push((*symbol, node_id));
                     }
                 }
             }
@@ -129,7 +125,7 @@ pub fn parse_tokens<'a, 'b>(
 mod test {
     use super::*;
     use engine;
-    use lang::golang::*;
+    use lang::{brainfuck, golang};
     use print_tokens;
 
     #[test]
@@ -150,19 +146,37 @@ mod test {
     }
 
     #[test]
-    fn test_parser() {
+    fn test_parser_expr() {
         let source = &r#"<E> ::= <T> <E'>
                         <E'> ::= "Operator(Add)" <T> <E'> | ""
                         <T> ::= <F> <T'>
                         <T'> ::= "Operator(Mul)" <F> <T'> | ""
                         <F> ::= "(" <E> ")" | "id" "#[..];
         let grammar = Grammar::from_str(source);
-        let lexer = make_lexer();
+        let lexer = golang::make_lexer();
         let input = "id + id * id";
         let tokens = engine(&lexer, input).unwrap();
         print_tokens(tokens.clone());
         let tokens_str = tokens.iter().map(|t| t.describe()).collect();
         assert!(parse_tokens(&grammar, Nonterminal("E"), tokens_str).is_ok());
+
+        /*println!("Pre-order:");
+        for node in tree.traverse_pre_order(tree.root_node_id().unwrap()).unwrap() {
+            print!("{}, ", node.data());
+        }*/
+    }
+
+    #[test]
+    fn test_parser_brainf() {
+        let source = &r#"<Code> ::= <Command> <Code> | ""
+                        <Command> ::= "Inc" | "Dec" | "Left" | "Right" | "Input" | "Output" | "Cond" <Code> "Loop" | "Comment" "#[..];
+        let grammar = Grammar::from_str(source);
+        let lexer = brainfuck::make_lexer();
+        let input = ",[.-[-->++<]>+]";
+        let tokens = engine(&lexer, input).unwrap();
+        print_tokens(tokens.clone());
+        let tokens_str = tokens.iter().map(|t| t.describe()).collect();
+        assert!(parse_tokens(&grammar, Nonterminal("Code"), tokens_str).is_ok());
 
         /*println!("Pre-order:");
         for node in tree.traverse_pre_order(tree.root_node_id().unwrap()).unwrap() {
