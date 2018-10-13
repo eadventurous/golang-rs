@@ -68,7 +68,7 @@ pub fn parse_tokens<'a, 'b>(
     grammar: &'a Grammar,
     start_symbol: GrammarSymbol<'a>,
     tokens: Vec<String>,
-) -> Result<Tree<String>, &'static str> {
+) -> Result<Tree<String>, String> {
     let (table, symbol_map) = construct_table(grammar, start_symbol);
 
     //construct tree
@@ -85,23 +85,41 @@ pub fn parse_tokens<'a, 'b>(
     let mut stack: Vec<(GrammarSymbol, NodeId)> = Vec::new();
     stack.push((Terminal("$"), root_id.clone()));
     stack.push((start_symbol, root_id));
+    let mut i = 1;
     let mut input = iter.next().unwrap();
     while !stack.is_empty() {
-        println!("stack: {:?}, input: {}", stack, input);
+        //println!("stack: {:?}, input: {}", stack, input);
         if stack.last().unwrap().0 == GrammarSymbol::Terminal(&input) {
             stack.pop();
             if !stack.is_empty() {
                 input = iter.next().unwrap();
+                i += 1;
             }
-        } else if let GrammarSymbol::Terminal(_) = stack.last().unwrap().0 {
-            return Err("Terminal encountered but nonterminal expected.");
+        } else if let GrammarSymbol::Terminal(s) = stack.last().unwrap().0 {
+            let error_msg = format!(
+                "Expected {:?}, got {} at token number {}",
+                stack.last().unwrap().0,
+                s,
+                i
+            );
+            //println!("{}", error_msg);
+            return Err(error_msg);
         } else {
             let i = symbol_map.get(&stack.last().unwrap().0).unwrap();
             let j = symbol_map.get(&GrammarSymbol::Terminal(&input)).unwrap();
             match table[[*i, *j]] {
-                None => return Err("Empty parse table entry."),
+                None => {
+                    let error_msg = format!(
+                        "No grammar rule for {:?} given {} at token number {}",
+                        stack.last().unwrap().0,
+                        input,
+                        i
+                    );
+                    //println!("{}", error_msg);
+                    return Err(error_msg);
+                }
                 Some(ref prod) => {
-                    println!("{:?}", prod);
+                    //println!("{:?}", prod);
                     stack.pop();
                     for symbol in prod.1.iter().rev() {
                         if let Terminal("") = symbol {
@@ -156,7 +174,7 @@ mod test {
         let lexer = golang::make_lexer();
         let input = "id + id * id";
         let tokens = engine(&lexer, input).unwrap();
-        print_tokens(tokens.clone());
+        //print_tokens(tokens.clone());
         let tokens_str = tokens.iter().map(|t| t.describe()).collect();
         assert!(parse_tokens(&grammar, Nonterminal("E"), tokens_str).is_ok());
 
@@ -174,10 +192,30 @@ mod test {
         let lexer = brainfuck::make_lexer();
         let input = ",[.-[-->++<]>+]";
         let tokens = engine(&lexer, input).unwrap();
-        print_tokens(tokens.clone());
+        //print_tokens(tokens.clone());
         let tokens_str = tokens.iter().map(|t| t.describe()).collect();
         assert!(parse_tokens(&grammar, Nonterminal("Code"), tokens_str).is_ok());
 
+        /*println!("Pre-order:");
+        for node in tree.traverse_pre_order(tree.root_node_id().unwrap()).unwrap() {
+            print!("{}, ", node.data());
+        }*/
+    }
+
+    #[test]
+    fn test_parser_error() {
+        let source = &r#"<E> ::= <T> <E'>
+                        <E'> ::= "Operator(Add)" <T> <E'> | ""
+                        <T> ::= <F> <T'>
+                        <T'> ::= "Operator(Mul)" <F> <T'> | ""
+                        <F> ::= "(" <E> ")" | "id" "#[..];
+        let grammar = Grammar::from_str(source);
+        let lexer = golang::make_lexer();
+        let input = "id + + * id";
+        let tokens = engine(&lexer, input).unwrap();
+        //sprint_tokens(tokens.clone());
+        let tokens_str = tokens.iter().map(|t| t.describe()).collect();
+        assert!(parse_tokens(&grammar, Nonterminal("E"), tokens_str).is_err());
         /*println!("Pre-order:");
         for node in tree.traverse_pre_order(tree.root_node_id().unwrap()).unwrap() {
             print!("{}, ", node.data());

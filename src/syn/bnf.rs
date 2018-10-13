@@ -79,7 +79,7 @@ impl<'a> Token<'a> for BnfToken<'a> {
 impl<'a, 'b> GrammarRule<'a, 'b> {
     fn from_str(s: &str) -> GrammarRule {
         let lexer = make_lexer();
-        println!("{}", s);
+        //println!("{}", s);
         let tokens = engine(&lexer, s).unwrap();
         let mut tokens_iter = tokens.iter();
         let name = match tokens_iter.next().unwrap() {
@@ -93,7 +93,7 @@ impl<'a, 'b> GrammarRule<'a, 'b> {
         let mut expression: Vec<Vec<GrammarSymbol>> = Vec::new();
         let mut prod: Vec<GrammarSymbol> = Vec::new();
         for token in tokens_iter {
-            println!("{:?}", token);
+            //println!("{:?}", token);
             match token {
                 BnfToken::Nonterminal(s) => prod.push(Nonterminal(&s[1..(s.len() - 1)])),
                 BnfToken::Terminal(s) => prod.push(Terminal(&s[1..(s.len() - 1)])),
