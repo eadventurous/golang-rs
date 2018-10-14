@@ -89,8 +89,11 @@ impl<'a, T> Lexer<'a, T>
                     // type: (&str, T)
                     .map(|(token, t)| {
                         let end = at_token + token;
+                        let first_char_len_utf8 = token.chars().next().unwrap().len_utf8();
+                        // first_char is needed to apply possible pending newline caused by skipping whitespaces.
+                        let first_char = &token[..first_char_len_utf8];
                         let token_span = Span {
-                            start: at + whitespace,
+                            start: at + whitespace + first_char,
                             end,
                         };
 
