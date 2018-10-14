@@ -1,5 +1,5 @@
-use lex::{Lexer, LexerBuilder, Token};
-
+#[allow(unused)]
+use lex::{Lexer, LexerBuilder, Location, MetaResult, Span, Token, TokenMeta, TokensExt};
 pub use self::GoToken::*;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
@@ -342,10 +342,173 @@ impl<'a> Token<'a> for GoToken<'a> {
     }
 }
 
+
+pub fn drop_comments<'a, I>(iter: I) -> DropComments<I>
+    where I: Iterator<Item=MetaResult<'a, GoToken<'a>>> {
+    DropComments { inner: iter }
+}
+
+pub struct DropComments<I> { inner: I }
+
+impl<'a, I> Iterator for DropComments<I>
+    where I: Iterator<Item=MetaResult<'a, GoToken<'a>>> {
+    type Item = MetaResult<'a, GoToken<'a>>;
+
+    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+        let mut next = self.inner.next();
+        while let Some(Ok(TokenMeta { token: GoToken::Comment(_), .. })) = next {
+            next = self.inner.next();
+        }
+        next
+    }
+}
+
+/// Insert missing optional semicolons into the token stream.
+///
+/// The following text is taken from The Go Programming Language Specification on [semicolons].
+///
+/// # Semicolons
+///
+/// The formal grammar uses semicolons ";" as terminators in a number of productions. Go programs
+/// may omit most of these semicolons using the following two rules:
+///
+/// 1. When the input is broken into tokens, a semicolon is automatically inserted into the token
+/// stream immediately after a line's final token if that token is
+///     * an identifier
+///     * an integer, floating-point, imaginary, rune, or string literal
+///     * one of the keywords `break`, `continue`, `fallthrough`, or `return`
+///     * one of the operators and punctuation `++`, `--`, `)`, `]`, or `}`
+/// 2. To allow complex statements to occupy a single line, a semicolon may be omitted before a
+/// closing "`)`" or "`}`".
+///
+/// [semicolons]: https://golang.org/ref/spec#Semicolons
+pub fn necessary_semicolon<'a, I>(iter: I) -> NecessarySemicolon<'a, I>
+    where I: Iterator<Item=MetaResult<'a, GoToken<'a>>> {
+    NecessarySemicolon { inner: iter, poisoned: false, pending: None, last: None }
+}
+
+
+pub struct NecessarySemicolon<'a, I> {
+    inner: I,
+    poisoned: bool,
+    /// If the last token was implicit semicolon, this should contain the next token to return.
+    pending: Option<TokenMeta<GoToken<'a>>>,
+    last: Option<TokenMeta<GoToken<'a>>>,
+}
+
+impl<'a, I> NecessarySemicolon<'a, I> {
+    fn same_line(&self, other: &TokenMeta<GoToken<'a>>) -> bool {
+        match self.last {
+            Some(TokenMeta { ref span, .. }) => span.same_line(&other.span),
+            None => true
+        }
+    }
+
+    fn new_line(&self, other: &TokenMeta<GoToken<'a>>) -> bool {
+        !self.same_line(other)
+    }
+
+    fn insert_semicolon(&mut self, next: TokenMeta<GoToken<'a>>) -> TokenMeta<GoToken<'a>> {
+        assert!(self.pending.is_none());
+
+        // semicolon spans directly after last token
+        let last = self.last.as_ref().unwrap().span.end;
+        let loc = Location::new(last.line, last.column + 1, last.absolute + 1);
+
+        self.pending = Some(next);
+
+        TokenMeta {
+            span: Span::from_location(loc),
+            token: GoToken::Operator(GoOperator::Semicolon),
+            implicit: true,
+        }
+    }
+
+    fn recover_after_semicolon(&mut self) -> Option<TokenMeta<GoToken<'a>>> {
+        match self.pending.take() {
+            Some(meta) => Some(meta),
+            None => None,
+        }
+    }
+
+    fn process(&mut self, meta: TokenMeta<GoToken<'a>>) -> TokenMeta<GoToken<'a>> {
+        /* rule one */
+        if self.new_line(&meta) {
+            match self.last {
+                Some(..) => match self.last.as_ref().unwrap().token {
+                    /**/Ident(..)
+                    | Literal(..)
+                    | Keyword(GoKeyword::Continue)
+                    | Keyword(GoKeyword::Break)
+                    | Keyword(GoKeyword::Fallthrough)
+                    | Keyword(GoKeyword::Return)
+                    | Operator(GoOperator::Inc)
+                    | Operator(GoOperator::Dec)
+                    | Operator(GoOperator::RParen)
+                    | Operator(GoOperator::RBrace)
+                    | Operator(GoOperator::RBrack)
+                    => self.insert_semicolon(meta),
+                    _ => meta
+                }
+                // first token ever
+                None => meta
+            }
+        } else /* rule two */ if false {
+            // ???
+            meta
+        } else {
+            meta
+        }
+    }
+}
+
+impl<'a, I> Iterator for NecessarySemicolon<'a, I>
+    where I: Iterator<Item=MetaResult<'a, GoToken<'a>>> {
+    type Item = MetaResult<'a, GoToken<'a>>;
+
+    fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+        if self.poisoned { return None; }
+
+        let token = {
+            match self.recover_after_semicolon() {
+                Some(meta) => meta,
+                None => {
+                    match self.inner.next() {
+                        Some(Ok(meta)) => {
+                            self.process(meta)
+                        }
+                        // pass through
+                        next @ Some(Err(..)) | next @ None => {
+                            self.poisoned = true;
+                            self.last = None;
+                            self.pending = None;
+                            return next;
+                        }
+                    }
+                }
+            }
+        };
+        self.last = Some(token.clone());
+        Some(Ok(token))
+    }
+}
+
 #[cfg(test)]
 mod test {
+    use ::lex::{next, token};
     use super::*;
-    use ::token;
+
+
+    macro_rules! must_not_match_token {
+        ($lexer:expr, $source:expr, $tok:pat) => {
+            match $lexer.tokens($source).next() {
+                Some(Ok($crate::lex::TokenMeta { token: $tok, .. })) => panic!("Token must not match!"),
+                _ => {},
+            }
+        };
+    }
+
+
 
     #[test]
     fn test_id() {
@@ -365,14 +528,11 @@ mod test {
             r".a",        // illegal: can't start with dot
         ];
         for id in valid_id.into_iter() {
-            assert_eq!(token(lexer.next(id)),
+            assert_eq!(token(next(&lexer, id)),
                        GoToken::Ident(&id));
         }
         for id in illegal_id.into_iter() {
-            match lexer.next(id) {
-                Some(Ok((_, GoToken::Ident(_)))) => panic!(),
-                _ => {}
-            }
+            must_not_match_token!(lexer, id, GoToken::Ident(_));
         }
     }
 
@@ -399,14 +559,11 @@ mod test {
             r"i",           //illegal: can't start with i
         ];
         for imaginary in valid_imaginary.into_iter() {
-            assert_eq!(token(lexer.next(imaginary)),
+            assert_eq!(token(next(&lexer, imaginary)),
                        GoToken::Literal(GoLiteral::Imaginary(&imaginary)));
         }
         for imaginary in illegal_imaginary.into_iter() {
-            match lexer.next(imaginary) {
-                Some(Ok((_, GoToken::Literal(GoLiteral::Imaginary(_))))) => panic!(),
-                _ => {}
-            }
+            must_not_match_token!(lexer, imaginary, GoToken::Literal(GoLiteral::Imaginary(_)));
         }
     }
 
@@ -431,14 +588,11 @@ mod test {
             r"82",         // illegal: it is integer
         ];
         for float in valid_floats.into_iter() {
-            assert_eq!(token(lexer.next(float)),
+            assert_eq!(token(next(&lexer, float)),
                        GoToken::Literal(GoLiteral::Float(&float)));
         }
         for float in illegal_floats.into_iter() {
-            match lexer.next(float) {
-                Some(Ok((_, Literal(GoLiteral::Float(_))))) => panic!(),
-                _ => {}
-            }
+            must_not_match_token!(lexer, float, Literal(GoLiteral::Float(_)));
         }
     }
 
@@ -470,11 +624,11 @@ mod test {
             // r"'\U00110000'", // illegal: invalid Unicode code point
         ];
         for rune in valid_runes.into_iter() {
-            assert_eq!(token(lexer.next(rune)),
+            assert_eq!(token(next(&lexer, rune)),
                        GoToken::Literal(GoLiteral::Rune(&rune[1..rune.len() - 1])));
         }
         for rune in illegal_runes.into_iter() {
-            assert!(lexer.next(rune).unwrap().is_err());
+            assert!(next(&lexer, rune).unwrap().is_err());
         }
     }
 
@@ -497,12 +651,12 @@ mod test {
         ];
 
         for s in raw_strings.into_iter() {
-            assert_eq!(token(lexer.next(s)),
+            assert_eq!(token(next(&lexer, s)),
                        GoToken::Literal(GoLiteral::RawString(&s[1..s.len() - 1])));
         }
 
         for s in interpreted_strings.into_iter() {
-            assert_eq!(token(lexer.next(s)),
+            assert_eq!(token(next(&lexer, s)),
                        GoToken::Literal(GoLiteral::InterpretedString(&s[1..s.len() - 1])));
         }
     }
@@ -511,9 +665,19 @@ mod test {
     fn test_white_space() {
         let lexer = make_lexer();
         let source = " \t\n42\n";
-        let tokens = lexer.tokens(source).collect::<Vec<_>>();
+        let tokens = lexer.into_tokens(source).into_raw().collect::<Vec<_>>();
 
-        assert!(tokens.iter().all(Result::is_ok));
-        assert_eq!(tokens.into_iter().map(Result::unwrap).collect::<Vec<_>>(), vec![Literal(GoLiteral::Integer("42"))]);
+        assert_eq!(vec![Literal(GoLiteral::Integer("42"))], tokens);
+    }
+
+    #[test]
+    fn test_semicolon() {
+        let lexer = make_lexer();
+        let source = "i++\nj";
+        let tokens = necessary_semicolon(drop_comments(lexer.into_tokens(source)))
+            .into_raw()
+            .collect::<Vec<_>>();
+
+        assert_eq!(vec![Ident("i"), Operator(GoOperator::Inc), Operator(GoOperator::Semicolon), Ident("j")], tokens);
     }
 }

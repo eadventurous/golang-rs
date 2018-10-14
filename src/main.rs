@@ -1,26 +1,19 @@
 extern crate regex;
 
+use lex::{MetaIter, Token};
+use std::io::Read;
+
 pub mod lang;
 pub mod lex;
 
-use lex::{Token, Tokens};
-
-use std::io::Read;
-
-/// Little helper for tests.
-pub fn token<'a, T: Token<'a>>(x: Option<Result<(&'a str, T), ()>>) -> T {
-    x.unwrap().unwrap().1
-}
-
 /// Fancy tokens printer.
-pub fn print_tokens<'a, T: Token<'a>>(tokens: Tokens<'a, T>) {
+pub fn print_tokens<'a, T: Token<'a>, I: MetaIter<'a, T>>(tokens: I) {
     println!("Tokens:");
     for (i, t) in tokens.enumerate() {
         match t {
-            Ok(token) => println!("#{:02}: {}", i + 1, token.describe()),
-            Err(_rest) => {
-                println!("ERROR")
-
+            Ok(meta) => println!("#{:02}: {}", i + 1, meta.token.describe()),
+            Err(error) => {
+                println!("{}", error);
             }
         }
     }
@@ -33,5 +26,7 @@ fn main() {
 
     let lexer = lang::golang::make_lexer();
     let tokens = lexer.into_tokens(&source);
+    let tokens = lang::golang::drop_comments(tokens);
+    let tokens = lang::golang::necessary_semicolon(tokens);
     print_tokens(tokens);
 }
