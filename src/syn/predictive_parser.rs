@@ -14,25 +14,32 @@ fn construct_table<'a>(
     HashMap<GrammarSymbol<'a>, usize>,
 ) {
     let terminals = grammar.get_terminals();
-    let non_terminals = grammar.get_nonterminals();
+    let terminals_len = terminals.len();
+    let non_terminals = grammar.get_non_terminals();
+    let non_terminals_len = non_terminals.len();
+
     let mut symbol_map = HashMap::new();
-    for i in 0..(terminals.len()) {
-        symbol_map.insert(terminals[i].clone(), i);
-    }
-    for i in 0..(non_terminals.len()) {
-        symbol_map.insert(non_terminals[i].clone(), i);
-    }
-    let mut table = Array2::from_elem((non_terminals.len(), terminals.len()), None);
+
+    // map terminals onto their indices
+    symbol_map.extend(terminals
+        .into_iter()
+        .enumerate()
+        .map(|(i, t)| (t, i)));
+
+    symbol_map.extend(non_terminals
+        .into_iter()
+        .enumerate()
+        .map(|(i, t)| (t, i)));
+
+    let mut table = Array2::from_elem((non_terminals_len, terminals_len), None);
     for rule in grammar.rules.iter() {
         for prod in rule.expression.iter() {
             let first_a = grammar.first(prod.clone());
             for &a in first_a.iter() {
                 if a != "" {
-                    let i = symbol_map
-                        .get(&GrammarSymbol::NonTerminal(rule.name))
-                        .unwrap();
-                    let j = symbol_map.get(&GrammarSymbol::Terminal(a)).unwrap();
-                    table[[*i, *j]] = Some(GrammarProduction(
+                    let i = symbol_map[&GrammarSymbol::NonTerminal(rule.name)];
+                    let j = symbol_map[&GrammarSymbol::Terminal(a)];
+                    table[[i, j]] = Some(GrammarProduction(
                         GrammarSymbol::NonTerminal(rule.name),
                         prod.clone(),
                     ));
@@ -41,20 +48,18 @@ fn construct_table<'a>(
             if first_a.contains(&"") {
                 #[allow(non_snake_case)]
                 let follow_A = grammar.follow(GrammarSymbol::NonTerminal(rule.name), start_symbol);
-                let i = symbol_map
-                    .get(&GrammarSymbol::NonTerminal(rule.name))
-                    .unwrap();
+                let i = symbol_map[&GrammarSymbol::NonTerminal(rule.name)];
                 if follow_A.contains(&"$") {
-                    let j = symbol_map.get(&GrammarSymbol::Terminal("$")).unwrap();
-                    table[[*i, *j]] = Some(GrammarProduction(
+                    let j = symbol_map[&GrammarSymbol::Terminal("$")];
+                    table[[i, j]] = Some(GrammarProduction(
                         GrammarSymbol::NonTerminal(rule.name),
                         prod.clone(),
                     ));
                 }
                 for &b in follow_A.iter() {
                     if b != "" {
-                        let j = symbol_map.get(&GrammarSymbol::Terminal(b)).unwrap();
-                        table[[*i, *j]] = Some(GrammarProduction(
+                        let j = symbol_map[&GrammarSymbol::Terminal(b)];
+                        table[[i, j]] = Some(GrammarProduction(
                             GrammarSymbol::NonTerminal(rule.name),
                             prod.clone(),
                         ));
@@ -69,7 +74,7 @@ fn construct_table<'a>(
 pub fn parse_tokens<'a, 'b>(
     grammar: &'a Grammar,
     start_symbol: GrammarSymbol<'a>,
-    tokens: Vec<String>,
+    mut tokens: Vec<String>,
 ) -> Result<Tree<String>, String> {
     let (table, symbol_map) = construct_table(grammar, start_symbol);
 
@@ -81,17 +86,17 @@ pub fn parse_tokens<'a, 'b>(
     let root_str = start_symbol.to_str();
     let root_id: NodeId = tree.insert(Node::new(root_str.clone()), AsRoot).unwrap();
 
-    let mut tokens = tokens.clone();
     tokens.push("$".to_string());
     let mut iter = tokens.iter();
     let mut stack: Vec<(GrammarSymbol, NodeId)> = Vec::new();
     stack.push((Terminal("$"), root_id.clone()));
     stack.push((start_symbol, root_id));
+
     let mut i = 1;
     let mut input = iter.next().unwrap();
     while !stack.is_empty() {
         //println!("stack: {:?}, input: {}", stack, input);
-        if stack.last().unwrap().0 == GrammarSymbol::Terminal(&input) {
+        if stack.last().unwrap().0 == GrammarSymbol::Terminal(&*input) {
             stack.pop();
             if !stack.is_empty() {
                 input = iter.next().unwrap();
@@ -107,9 +112,9 @@ pub fn parse_tokens<'a, 'b>(
             //println!("{}", error_msg);
             return Err(error_msg);
         } else {
-            let i = symbol_map.get(&stack.last().unwrap().0).unwrap();
-            let j = symbol_map.get(&GrammarSymbol::Terminal(&input)).unwrap();
-            match table[[*i, *j]] {
+            let i = symbol_map[&stack.last().unwrap().0];
+            let j = symbol_map[&GrammarSymbol::Terminal(&*input)];
+            match table[[i, j]] {
                 None => {
                     let error_msg = format!(
                         "No grammar rule for {:?} given {} at token number {}",
@@ -155,8 +160,8 @@ mod test {
                         <F> ::= "(" <E> ")" | "id" "#[..];
         let grammar = Grammar::from_str(source);
         let (table, symbol_map) = construct_table(&grammar, NonTerminal("E"));
-        let &i = symbol_map.get(&GrammarSymbol::NonTerminal("E\'")).unwrap();
-        let &j = symbol_map.get(&GrammarSymbol::Terminal("+")).unwrap();
+        let i = symbol_map[&GrammarSymbol::NonTerminal("E\'")];
+        let j = symbol_map[&GrammarSymbol::Terminal("+")];
         let expected = vec![Terminal("+"), NonTerminal("T"), NonTerminal("E\'")];
         if let Some(ref prod) = table[[i, j]] {
             assert_eq!(prod.1, expected);

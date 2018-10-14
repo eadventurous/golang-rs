@@ -1,5 +1,8 @@
 use ::lex::{Lexer, LexerBuilder, Token, TokensExt};
 pub use self::GrammarSymbol::*;
+use std::collections::hash_set::HashSet;
+#[allow(unused)]
+use std::iter::FromIterator;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum GrammarSymbol<'a> {
@@ -8,7 +11,7 @@ pub enum GrammarSymbol<'a> {
 }
 
 impl<'a> GrammarSymbol<'a> {
-    pub fn to_str(&self) -> String{
+    pub fn to_str(&self) -> String {
         let s = match self.clone() {
             Terminal(s) => s,
             NonTerminal(s) => s,
@@ -65,16 +68,14 @@ fn make_lexer<'a>() -> Lexer<'a, BnfToken<'a>> {
         .add(r"\|", constant(BnfToken::Operator(BnfOperator::Alt)))
         .add(r"<.+?>", |c| {
             BnfToken::NonTerminal(c.get(0).unwrap().as_str())
-        }).add("\".*?\"", |c| {
+        })
+        .add("\".*?\"", |c| {
             BnfToken::Terminal(c.get(0).unwrap().as_str())
-        }).build()
+        })
+        .build()
 }
 
-impl<'a> Token<'a> for BnfToken<'a> {
-    fn describe(&self) -> String {
-        format!("{:?}", self)
-    }
-}
+impl<'a> Token<'a> for BnfToken<'a> {}
 
 impl<'a, 'b> GrammarRule<'a, 'b> {
     fn from_str(s: &str) -> GrammarRule {
@@ -86,10 +87,10 @@ impl<'a, 'b> GrammarRule<'a, 'b> {
         };
         match tokens.next().unwrap() {
             BnfToken::Operator(BnfOperator::Equals) => {}
-            _ => panic!("Equals sign expected at after the first nonterminal."),
+            _ => panic!("Equals sign expected after the first nonterminal."),
         };
-        let mut expression: Vec<Vec<GrammarSymbol>> = Vec::new();
-        let mut prod: Vec<GrammarSymbol> = Vec::new();
+        let mut expression: Vec<Vec<GrammarSymbol>> = vec![];
+        let mut prod: Vec<GrammarSymbol> = vec![];
         for token in tokens {
             //println!("{:?}", token);
             match token {
@@ -97,7 +98,7 @@ impl<'a, 'b> GrammarRule<'a, 'b> {
                 BnfToken::Terminal(s) => prod.push(Terminal(&s[1..(s.len() - 1)])),
                 BnfToken::Operator(BnfOperator::Alt) => {
                     expression.push(prod);
-                    prod = Vec::new();
+                    prod = vec![];
                 }
                 _ => panic!("Unexpected token in the expression part."),
             }
@@ -115,17 +116,17 @@ pub struct Grammar<'a, 'b> {
 
 impl<'a, 'b> Grammar<'a, 'b> {
     pub fn from_str(s: &str) -> Grammar {
-        let mut rules = Vec::new();
+        let mut rules = vec![];
         for line in s.lines() {
             rules.push(GrammarRule::from_str(line));
         }
         Grammar { rules }
     }
 
-    pub fn follow(&self, token: GrammarSymbol, start_symbol: GrammarSymbol) -> Vec<&'b str> {
-        let mut set: Vec<&str> = Vec::new();
+    pub fn follow(&self, token: GrammarSymbol, start_symbol: GrammarSymbol) -> HashSet<&'b str> {
+        let mut set: HashSet<&str> = HashSet::new();
         if token == start_symbol {
-            set.push("$");
+            set.insert("$");
         }
         for rule in self.rules.iter() {
             for prod in rule.expression.iter() {
@@ -134,10 +135,8 @@ impl<'a, 'b> Grammar<'a, 'b> {
                     let mut has_empty = false;
                     if !follow_symbols.is_empty() {
                         let first_beta = self.first(follow_symbols.to_vec());
-                        for e in first_beta.iter() {
-                            if e != &"" && !set.contains(e) {
-                                set.push(e);
-                            }
+                        for e in first_beta.iter().filter(|s| !s.is_empty()) {
+                            set.insert(e);
                         }
                         if first_beta.contains(&"") {
                             has_empty = true;
@@ -148,9 +147,7 @@ impl<'a, 'b> Grammar<'a, 'b> {
                     if has_empty && (NonTerminal(rule.name) != token) {
                         let follow_a = self.follow(NonTerminal(rule.name), start_symbol);
                         for e in follow_a.iter() {
-                            if !set.contains(e) {
-                                set.push(e);
-                            }
+                            set.insert(e);
                         }
                     }
                 }
@@ -159,21 +156,21 @@ impl<'a, 'b> Grammar<'a, 'b> {
         set
     }
 
-    pub fn first(&self, tokens: Vec<GrammarSymbol<'b>>) -> Vec<&'b str> {
-        let mut set: Vec<&str> = Vec::new();
-        for token in tokens.iter() {
-            let mut x_set: Vec<&str> = Vec::new();
-            match *token {
-                Terminal(s) => x_set.push(s),
+    pub fn first(&self, tokens: Vec<GrammarSymbol<'b>>) -> HashSet<&'b str> {
+        let mut set: HashSet<&str> = HashSet::new();
+        for token in tokens {
+            let mut x_set: HashSet<&str> = HashSet::new();
+            match token {
+                Terminal(s) => { x_set.insert(s); }
                 NonTerminal(_) => {
-                    let rule = self.get_rule(token).unwrap();
+                    let rule = self.get_rule(&token).unwrap();
                     for prod in rule.expression.iter() {
                         let mut count = 0;
                         for symbol in prod.iter() {
                             let s_first = self.first(vec![*symbol]);
                             for a in s_first.iter() {
-                                if *a != "" && !x_set.contains(a) {
-                                    x_set.push(a);
+                                if *a != "" {
+                                    x_set.insert(a);
                                 }
                             }
                             if !s_first.contains(&"") {
@@ -183,17 +180,13 @@ impl<'a, 'b> Grammar<'a, 'b> {
                         }
                         //if first(Y[j]) for j in 1..k contains "empty", then add it to the first(X)
                         if count == prod.len() {
-                            x_set.push(&"");
+                            x_set.insert(&"");
                         }
                     }
                 }
             };
             let contains_empty = x_set.contains(&"");
-            for e in x_set.iter() {
-                if !set.contains(e) {
-                    set.push(e);
-                }
-            }
+            set.extend(x_set);
             if !contains_empty {
                 break;
             }
@@ -208,24 +201,22 @@ impl<'a, 'b> Grammar<'a, 'b> {
         }
     }
 
-    pub fn get_nonterminals(&self) -> Vec<GrammarSymbol> {
+    pub fn get_non_terminals(&self) -> HashSet<GrammarSymbol> {
         self.rules.iter().map(|r| NonTerminal(r.name)).collect()
     }
 
-    pub fn get_terminals(&self) -> Vec<&GrammarSymbol> {
-        let mut terminals: Vec<&GrammarSymbol> = Vec::new();
+    pub fn get_terminals(&self) -> HashSet<GrammarSymbol> {
+        let mut terminals: HashSet<GrammarSymbol> = hash_set!();
         for rule in self.rules.iter() {
             for prod in rule.expression.iter() {
                 for sym in prod.iter() {
                     if let Terminal(_) = sym {
-                        if !terminals.contains(&sym) {
-                            terminals.push(sym)
-                        }
+                        terminals.insert(sym.clone());
                     }
                 }
             }
         }
-        terminals.push(&Terminal("$"));
+        terminals.insert(Terminal("$"));
         terminals
     }
 }
@@ -264,10 +255,10 @@ mod test {
                         <A> ::= "a""b" | "a" | ""
                         <B> ::= "" | "d" "#[..];
         let grammar = Grammar::from_str(source);
-        assert_eq!(grammar.first(vec![NonTerminal("A")]), vec!["a", ""]);
+        assert_eq!(grammar.first(vec![NonTerminal("A")]), hash_set!["a", ""]);
         assert_eq!(
             grammar.first(vec![NonTerminal("S")]),
-            vec!["c", "d", "a", ""]
+            hash_set!["c", "d", "a", ""]
         );
     }
 
@@ -279,7 +270,7 @@ mod test {
         let grammar = Grammar::from_str(source);
         assert_eq!(
             grammar.first(vec![NonTerminal("B"), NonTerminal("A")]),
-            vec!["", "d", "a"]
+            hash_set!["", "d", "a"]
         );
     }
 
@@ -291,8 +282,8 @@ mod test {
                         <T'> ::= "*" <F> <T'> | ""
                         <F> ::= "(" <E> ")" | "id" "#[..];
         let grammar = Grammar::from_str(source);
-        assert_eq!(grammar.first(vec![NonTerminal("E'")]), vec!["+", ""]);
-        assert_eq!(grammar.first(vec![NonTerminal("T'")]), vec!["*", ""]);
+        assert_eq!(grammar.first(vec![NonTerminal("E'")]), hash_set!["+", ""]);
+        assert_eq!(grammar.first(vec![NonTerminal("T'")]), hash_set!["*", ""]);
     }
 
     #[test]
@@ -303,7 +294,7 @@ mod test {
                         <T'> ::= "*" <F> <T'> | ""
                         <F> ::= "(" <E> ")" | "id" "#[..];
         let grammar = Grammar::from_str(source);
-        assert_eq!(grammar.follow(NonTerminal("E"), NonTerminal("E")), vec!["$", ")"]);
-        assert_eq!(grammar.follow(NonTerminal("T"), NonTerminal("E")), vec!["+", "$",")"]);
+        assert_eq!(grammar.follow(NonTerminal("E"), NonTerminal("E")), hash_set!["$", ")"]);
+        assert_eq!(grammar.follow(NonTerminal("T"), NonTerminal("E")), hash_set!["+", "$", ")"]);
     }
 }
