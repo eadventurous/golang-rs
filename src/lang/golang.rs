@@ -1,4 +1,5 @@
-use lex::{Lexer, LexerBuilder, MetaResult, Token, TokenMeta};
+#[allow(unused)]
+use lex::{Lexer, LexerBuilder, Location, MetaResult, Span, Token, TokenMeta, TokensExt};
 pub use self::GoToken::*;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
@@ -551,9 +552,6 @@ mod test {
         let source = " \t\n42\n";
         let tokens = lexer.into_tokens(source).into_raw().collect::<Vec<_>>();
 
-        assert!(tokens.iter().all(Result::is_ok));
-        assert_eq!(vec![Literal(GoLiteral::Integer("42"))], tokens.into_iter()
-                                                                  .map(Result::unwrap)
-                                                                  .collect::<Vec<_>>());
+        assert_eq!(vec![Literal(GoLiteral::Integer("42"))], tokens);
     }
 }

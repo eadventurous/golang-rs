@@ -14,6 +14,7 @@ use regex::{Captures, Regex};
 use std::fmt::{self, Debug, Formatter};
 use std::cmp::Ordering;
 use std::rc::Rc;
+use std::marker::PhantomData;
 
 
 pub struct Lexer<'a, T> {
@@ -114,7 +115,7 @@ pub struct LexerResult<T> {
 
 pub type MetaResult<'a, T> = Result<TokenMeta<T>, Error<'a, Bytes>>;
 
-pub trait MetaIter<'a, T> : Iterator<Item=MetaResult<'a, T>> {}
+pub trait MetaIter<'a, T>: Iterator<Item=MetaResult<'a, T>> {}
 
 impl<'a, T, I> MetaIter<'a, T> for I
     where T: Token<'a>,
@@ -146,14 +147,6 @@ impl<'a, T: Token<'a>> Tokens<'a, T> {
             location: Location { column: 1, ..Default::default() },
         }
     }
-
-    /// Helper for tests.
-    pub fn into_raw(self) -> impl Iterator<Item=Result<T, Error<'a, Bytes>>> {
-        self.map(|result| match result {
-            Ok(meta) => Ok(meta.token),
-            Err(e) => Err(e),
-        })
-    }
 }
 
 
@@ -179,6 +172,39 @@ impl<'a, T> Iterator for Tokens<'a, T>
                     None
                 }
             }
+        }
+    }
+}
+
+pub trait TokensExt<'a, T>
+    where Self: MetaIter<'a, T> + Sized,
+          T: Token<'a> {
+    /// Helper for tests.
+    fn into_raw(self) -> TokensRaw<Self, T>;
+}
+
+impl<'a, T, I> TokensExt<'a, T> for I
+    where I: MetaIter<'a, T>,
+          T: Token<'a> {
+    fn into_raw(self) -> TokensRaw<Self, T> {
+        TokensRaw { inner: self, _marker: Default::default() }
+    }
+}
+
+
+pub struct TokensRaw<I, T> {
+    inner: I,
+    _marker: PhantomData<T>,
+}
+
+impl<'a, T, I> Iterator for TokensRaw<I, T>
+    where I: MetaIter<'a, T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        match self.inner.next() {
+            Some(Ok(TokenMeta { token, .. })) => Some(token),
+            _ => None,
         }
     }
 }
@@ -858,5 +884,14 @@ Error at <stdin>:2:5
 Custom error message.
 ";
         assert_eq!(expected.to_owned(), format!("{}", error));
+    }
+
+    #[test]
+    fn test_raw_iter() {
+        use ::lang::brainfuck::{BfToken, make_lexer};
+
+        let lexer = make_lexer();
+        // type check
+        let _: Vec<BfToken> = lexer.tokens("").into_raw().collect();
     }
 }
