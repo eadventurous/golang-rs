@@ -66,11 +66,11 @@ fn make_lexer<'a>() -> Lexer<'a, BnfToken<'a>> {
         .skip_whitespaces(whitespace_filter)
         .add(r"::=", constant(BnfToken::Operator(BnfOperator::Equals)))
         .add(r"\|", constant(BnfToken::Operator(BnfOperator::Alt)))
-        .add(r"<.+?>", |c| {
-            BnfToken::NonTerminal(c.get(0).unwrap().as_str())
+        .add(r"<(.+?)>", |c| {
+            BnfToken::NonTerminal(c.get(1).unwrap().as_str())
         })
-        .add("\".*?\"", |c| {
-            BnfToken::Terminal(c.get(0).unwrap().as_str())
+        .add("\"(.*?)\"", |c| {
+            BnfToken::Terminal(c.get(1).unwrap().as_str())
         })
         .build()
 }
@@ -82,7 +82,7 @@ impl<'a, 'b> GrammarRule<'a, 'b> {
         let lexer = make_lexer();
         let mut tokens = lexer.into_tokens(s).into_raw();
         let name = match tokens.next().unwrap() {
-            BnfToken::NonTerminal(s) => &s[1..(s.len() - 1)],
+            BnfToken::NonTerminal(s) => s,
             _ => panic!("NonTerminal expected at the start of the rule."),
         };
         match tokens.next().unwrap() {
@@ -94,8 +94,8 @@ impl<'a, 'b> GrammarRule<'a, 'b> {
         for token in tokens {
             //println!("{:?}", token);
             match token {
-                BnfToken::NonTerminal(s) => prod.push(NonTerminal(&s[1..(s.len() - 1)])),
-                BnfToken::Terminal(s) => prod.push(Terminal(&s[1..(s.len() - 1)])),
+                BnfToken::NonTerminal(s) => prod.push(NonTerminal(s)),
+                BnfToken::Terminal(s) => prod.push(Terminal(s)),
                 BnfToken::Operator(BnfOperator::Alt) => {
                     expression.push(prod);
                     prod = vec![];
