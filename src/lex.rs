@@ -52,11 +52,11 @@ impl<'a, T> Lexer<'a, T>
     ///     where stripped = skip_whitespaces(source)
     /// ```
     pub fn next(&self, source: &'a str, at: Location<Bytes>) -> Option<Result<LexerResult<T>, Error<'a, Bytes>>> {
-        assert!(source.len() >= at.absolute);
+        assert!(source.as_bytes().len() >= at.absolute);
         let src = &source[at.absolute..];
 
         let without_whitespace = (self.skip_whitespaces)(src);
-        assert!(src.len() >= without_whitespace.len());
+        assert!(src.as_bytes().len() >= without_whitespace.as_bytes().len());
         let whitespace_len = src.len() - without_whitespace.len();
         let whitespace = &src[..whitespace_len];
 
@@ -161,7 +161,7 @@ impl<'a, T> Iterator for Tokens<'a, T>
             match self.lexer.next(self.source, self.location) {
                 Some(Ok(LexerResult { token, location, t, .. })) => {
                     self.location = location;
-                    Some(Ok(TokenMeta { span: token, token: t }))
+                    Some(Ok(TokenMeta { span: token, token: t, implicit: false }))
                 }
                 Some(Err(error)) => {
                     self.error = true;
@@ -622,17 +622,18 @@ pub type LinesWithSpans<'a, M> = Vec<(&'a str, Span<M>)>;
 pub struct TokenMeta<T> {
     pub span: Span<Bytes>,
     pub token: T,
+    pub implicit: bool,
 }
 
 impl<T> Clone for TokenMeta<T> where T: Clone {
     fn clone(&self) -> Self {
-        Self { span: self.span, token: self.token.clone() }
+        Self { span: self.span, token: self.token.clone(), implicit: self.implicit }
     }
 }
 
 impl<T> Debug for TokenMeta<T> where T: Debug {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        write!(f, "TokenMeta {{ span: {:?}, token: {:?} }}", self.span, self.token)
+        write!(f, "TokenMeta {{ span: {:?}, token: {:?}, implicit: {} }}", self.span, self.token, self.implicit)
     }
 }
 
@@ -835,6 +836,7 @@ mod test {
                 end: Location::new(2, 1, 5),
             },
             token: Tok,
+            implicit: false,
         };
     }
 
