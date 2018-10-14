@@ -618,6 +618,11 @@ impl<M: Metrics> Span<M> {
     pub fn total_lines(&self) -> usize {
         if self.is_multiline() { self.end.line - self.start.line + 1 } else { 1 }
     }
+
+    /// Check if two tokens are both on the same line.
+    pub fn same_line(&self, other: &Self) -> bool {
+        self.end.line == other.start.line
+    }
 }
 
 pub type LinesWithSpans<'a, M> = Vec<(&'a str, Span<M>)>;
