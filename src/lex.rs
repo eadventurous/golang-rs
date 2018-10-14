@@ -517,6 +517,14 @@ impl<M: Metrics> Span<M> {
         }
     }
 
+    /// Make span over one character at `location`.
+    pub fn from_location(location: Location<M>) -> Self {
+        Self {
+            start: location,
+            end: location,
+        }
+    }
+
     /// Span length, inclusive.
     ///
     /// # Panics
@@ -785,6 +793,14 @@ mod test {
     #[test]
     fn test_span_from() {
         assert_eq!(ONE_LINE_BYTES_SPAN, Span::<Bytes>::from(SOURCE, 5, 12));
+    }
+
+    #[test]
+    fn test_span_from_location() {
+        let loc = Location::<Bytes>::new(1, 0, 0);
+        let span = Span::from_location(loc);
+
+        assert_eq!(1, span.len());
     }
 
 
