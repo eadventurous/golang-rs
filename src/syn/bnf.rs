@@ -1,8 +1,36 @@
+//! BNF rules internals.
+//! Proceed at your own risk!
+//!
+//! ```
+//!                          __    _
+//!                     _wr""        "-q__
+//!                  _dP                 9m_
+//!                _#P                     9#_
+//!               d#@                       9#m
+//!              d##                         ###
+//!             J###                         ###L
+//!             {###K                       J###K
+//!             ]####K      ___aaa___      J####F
+//!         __gmM######_  w#P""   ""9#m  _d#####Mmw__
+//!      _g##############mZ_         __g##############m_
+//!    _d####M@PPPP@@M#######Mmp gm#########@@PPP9@M####m_
+//!   a###""          ,Z"#####@" '######"\g          ""M##m
+//!  J#@"             0L  "*##     ##@"  J#              *#K
+//!  #"               `#    "_gmwgm_~    dF               `#_
+//! 7F                 "#_   ]#####F   _dK                 JE
+//! ]                    *m__ ##### __g@"                   F
+//!                        "PJ#####LP"
+//!  `                       0######_                      '
+//!                        _0########_
+//!      .               _d#####^#####m__              ,
+//!       "*w_________am#####P"   ~9#####mw_________w*"
+//!           ""9@#####@M""           ""P@#####@M""
+//!
+//!
+//! ```
 use ::lex::{Lexer, LexerBuilder, Token, TokensExt};
 pub use self::GrammarSymbol::*;
-use std::collections::hash_set::HashSet;
-#[allow(unused)]
-use std::iter::FromIterator;
+use std::collections::HashSet;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
 pub enum GrammarSymbol<'a> {
@@ -18,6 +46,11 @@ impl<'a> GrammarSymbol<'a> {
         };
         s.to_string()
     }
+
+    /// Is this an empty production symbol, epsilon?
+    pub fn is_epsilon(self) -> bool {
+        self == Terminal("")
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -25,6 +58,7 @@ pub struct GrammarProduction<'a>(pub GrammarSymbol<'a>, pub Vec<GrammarSymbol<'a
 
 pub struct GrammarRule<'a, 'b> {
     pub name: &'a str,
+    /// Alternatives, each in its own sub-vector.
     pub expression: Vec<Vec<GrammarSymbol<'b>>>,
 }
 
@@ -37,9 +71,9 @@ pub enum BnfToken<'a> {
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub enum BnfOperator {
-    // "::="
+    /// "::="
     Equals,
-    //Alternative "|"
+    /// Alternative "|"
     Alt,
 }
 
@@ -78,17 +112,19 @@ fn make_lexer<'a>() -> Lexer<'a, BnfToken<'a>> {
 impl<'a> Token<'a> for BnfToken<'a> {}
 
 impl<'a, 'b> GrammarRule<'a, 'b> {
-    fn from_str(s: &str) -> GrammarRule {
+    fn from_str(s: &str) -> Result<GrammarRule, &'static str> {
         let lexer = make_lexer();
         let mut tokens = lexer.into_tokens(s).into_raw();
-        let name = match tokens.next().unwrap() {
-            BnfToken::NonTerminal(s) => s,
-            _ => panic!("NonTerminal expected at the start of the rule."),
+
+        let name = match tokens.next() {
+            Some(BnfToken::NonTerminal(s)) => s,
+            _ => Err("NonTerminal expected at the start of the rule.")?
         };
-        match tokens.next().unwrap() {
-            BnfToken::Operator(BnfOperator::Equals) => {}
-            _ => panic!("Equals sign expected after the first nonterminal."),
-        };
+
+        if tokens.next() != Some(BnfToken::Operator(BnfOperator::Equals)) {
+            Err("Equals sign expected after the first nonterminal.")?;
+        }
+
         let mut expression: Vec<Vec<GrammarSymbol>> = vec![];
         let mut prod: Vec<GrammarSymbol> = vec![];
         for token in tokens {
@@ -100,13 +136,13 @@ impl<'a, 'b> GrammarRule<'a, 'b> {
                     expression.push(prod);
                     prod = vec![];
                 }
-                _ => panic!("Unexpected token in the expression part."),
+                _ => Err("Unexpected token in the expression part.")?,
             }
         }
         if !prod.is_empty() {
             expression.push(prod);
         }
-        GrammarRule { name, expression }
+        Ok(GrammarRule { name, expression })
     }
 }
 
@@ -114,36 +150,45 @@ pub struct Grammar<'a, 'b> {
     pub rules: Vec<GrammarRule<'a, 'b>>,
 }
 
+fn non_empties<'a, S: AsRef<str>>(iter: impl Iterator<Item=S>) -> impl Iterator<Item=S> {
+    iter.filter(|s| !s.as_ref().trim().is_empty())
+}
+
 impl<'a, 'b> Grammar<'a, 'b> {
-    pub fn from_str(s: &str) -> Grammar {
+    pub fn from_str(s: &str) -> Result<Grammar, &'static str> {
         let mut rules = vec![];
-        for line in s.lines() {
-            rules.push(GrammarRule::from_str(line));
+
+        for line in non_empties(s.lines()) {
+            rules.push(GrammarRule::from_str(line)?);
         }
-        Grammar { rules }
+        Ok(Grammar { rules })
     }
 
     pub fn follow(&self, token: GrammarSymbol, start_symbol: GrammarSymbol) -> HashSet<&'b str> {
-        let mut set: HashSet<&str> = HashSet::new();
+        let mut set = hash_set!();
+
         if token == start_symbol {
             set.insert("$");
         }
+
         for rule in self.rules.iter() {
             for prod in rule.expression.iter() {
                 if let Some(i) = prod.iter().position(|&s| s == token) {
                     let (_, follow_symbols) = prod.split_at(i + 1);
                     let mut has_empty = false;
+
                     if !follow_symbols.is_empty() {
                         let first_beta = self.first(follow_symbols.to_vec());
-                        for e in first_beta.iter().filter(|s| !s.is_empty()) {
-                            set.insert(e);
-                        }
+
+                        set.extend(non_empties(first_beta.iter()));
+
                         if first_beta.contains(&"") {
                             has_empty = true;
                         }
                     } else {
                         has_empty = true;
                     }
+
                     if has_empty && (NonTerminal(rule.name) != token) {
                         let follow_a = self.follow(NonTerminal(rule.name), start_symbol);
                         for e in follow_a.iter() {
@@ -157,22 +202,24 @@ impl<'a, 'b> Grammar<'a, 'b> {
     }
 
     pub fn first(&self, tokens: Vec<GrammarSymbol<'b>>) -> HashSet<&'b str> {
-        let mut set: HashSet<&str> = HashSet::new();
+        let mut set = hash_set! {};
+
         for token in tokens {
-            let mut x_set: HashSet<&str> = HashSet::new();
+            let mut x_set = hash_set! {};
+
             match token {
                 Terminal(s) => { x_set.insert(s); }
-                NonTerminal(_) => {
-                    let rule = self.get_rule(&token).unwrap();
+                NonTerminal(name) => {
+                    let rule = self.get_rule(name).unwrap();
+
                     for prod in rule.expression.iter() {
                         let mut count = 0;
+
                         for symbol in prod.iter() {
                             let s_first = self.first(vec![*symbol]);
-                            for a in s_first.iter() {
-                                if *a != "" {
-                                    x_set.insert(a);
-                                }
-                            }
+
+                            x_set.extend(non_empties(s_first.iter()));
+
                             if !s_first.contains(&"") {
                                 break;
                             }
@@ -194,11 +241,8 @@ impl<'a, 'b> Grammar<'a, 'b> {
         set
     }
 
-    pub fn get_rule(&self, token: &GrammarSymbol) -> Option<&GrammarRule<'a, 'b>> {
-        match *token {
-            NonTerminal(s) => self.rules.iter().filter(|r| r.name == s).next(),
-            Terminal(_) => None,
-        }
+    pub fn get_rule(&self, name: &str) -> Option<&GrammarRule<'a, 'b>> {
+        self.rules.iter().filter(|r| r.name == name).next()
     }
 
     pub fn get_non_terminals(&self) -> HashSet<GrammarSymbol> {
@@ -206,7 +250,7 @@ impl<'a, 'b> Grammar<'a, 'b> {
     }
 
     pub fn get_terminals(&self) -> HashSet<GrammarSymbol> {
-        let mut terminals: HashSet<GrammarSymbol> = hash_set!();
+        let mut terminals: HashSet<GrammarSymbol> = hash_set!(Terminal("$"));
         for rule in self.rules.iter() {
             for prod in rule.expression.iter() {
                 for sym in prod.iter() {
@@ -216,7 +260,6 @@ impl<'a, 'b> Grammar<'a, 'b> {
                 }
             }
         }
-        terminals.insert(Terminal("$"));
         terminals
     }
 }
@@ -226,16 +269,36 @@ mod test {
     use super::*;
 
     #[test]
+    fn test_grammar_symbol() {
+        let symbol = Terminal("");
+        assert!(symbol.is_epsilon());
+
+        let symbol = Terminal("abc");
+        assert!(!symbol.is_epsilon());
+
+        // in fact, this non-terminal is invalid
+        let symbol = NonTerminal("");
+        assert!(!symbol.is_epsilon());
+
+        let symbol = NonTerminal("E");
+        assert!(!symbol.is_epsilon());
+    }
+
+    #[test]
     fn test_bnf_parsing_rule_name() {
-        let source = &r#"<opt-suffix-part> ::= "Sr." | "Jr." | <roman-numeral> | """#[..];
-        let rule = GrammarRule::from_str(source);
+        let source = r#"
+            <opt-suffix-part> ::= "Sr." | "Jr." | <roman-numeral> | ""
+        "#;
+        let rule = GrammarRule::from_str(source).unwrap();
         assert_eq!(rule.name, "opt-suffix-part");
     }
 
     #[test]
     fn test_bnf_parsing_expr() {
-        let source = &r#"<opt-suffix-part> ::= "Sr." | "Jr." <roman-numeral> """#[..];
-        let rule = GrammarRule::from_str(source);
+        let source = r#"
+            <opt-suffix-part> ::= "Sr." | "Jr." <roman-numeral> ""
+        "#;
+        let rule = GrammarRule::from_str(source).unwrap();
         assert_eq!(
             rule.expression,
             vec![
@@ -251,10 +314,12 @@ mod test {
 
     #[test]
     fn test_first_set() {
-        let source = &r#"<S> ::= "c"<A>"d" | <B><A>
-                        <A> ::= "a""b" | "a" | ""
-                        <B> ::= "" | "d" "#[..];
-        let grammar = Grammar::from_str(source);
+        let source = r#"
+            <S> ::= "c"<A>"d" | <B><A>
+            <A> ::= "a""b" | "a" | ""
+            <B> ::= "" | "d"
+        "#;
+        let grammar = Grammar::from_str(source).unwrap();
         assert_eq!(grammar.first(vec![NonTerminal("A")]), hash_set!["a", ""]);
         assert_eq!(
             grammar.first(vec![NonTerminal("S")]),
@@ -264,10 +329,12 @@ mod test {
 
     #[test]
     fn test_first_set_multiple() {
-        let source = &r#"<S> ::= "c"<A>"d" | <B><A>
-                        <A> ::= "a""b" | "a" | ""
-                        <B> ::= "" | "d" "#[..];
-        let grammar = Grammar::from_str(source);
+        let source = r#"
+            <S> ::= "c"<A>"d" | <B><A>
+            <A> ::= "a""b" | "a" | ""
+            <B> ::= "" | "d"
+        "#;
+        let grammar = Grammar::from_str(source).unwrap();
         assert_eq!(
             grammar.first(vec![NonTerminal("B"), NonTerminal("A")]),
             hash_set!["", "d", "a"]
@@ -276,24 +343,28 @@ mod test {
 
     #[test]
     fn test_first_set_recursive() {
-        let source = &r#"<E> ::= <T> <E'>
-                        <E'> ::= "+" <T> <E'> | ""
-                        <T> ::= <F> <T'>
-                        <T'> ::= "*" <F> <T'> | ""
-                        <F> ::= "(" <E> ")" | "id" "#[..];
-        let grammar = Grammar::from_str(source);
+        let source = r#"
+            <E> ::= <T> <E'>
+            <E'> ::= "+" <T> <E'> | ""
+            <T> ::= <F> <T'>
+            <T'> ::= "*" <F> <T'> | ""
+            <F> ::= "(" <E> ")" | "id"
+        "#;
+        let grammar = Grammar::from_str(source).unwrap();
         assert_eq!(grammar.first(vec![NonTerminal("E'")]), hash_set!["+", ""]);
         assert_eq!(grammar.first(vec![NonTerminal("T'")]), hash_set!["*", ""]);
     }
 
     #[test]
     fn test_follow_set() {
-        let source = &r#"<E> ::= <T> <E'>
-                        <E'> ::= "+" <T> <E'> | ""
-                        <T> ::= <F> <T'>
-                        <T'> ::= "*" <F> <T'> | ""
-                        <F> ::= "(" <E> ")" | "id" "#[..];
-        let grammar = Grammar::from_str(source);
+        let source = r#"
+            <E> ::= <T> <E'>
+            <E'> ::= "+" <T> <E'> | ""
+            <T> ::= <F> <T'>
+            <T'> ::= "*" <F> <T'> | ""
+            <F> ::= "(" <E> ")" | "id"
+        "#;
+        let grammar = Grammar::from_str(source).unwrap();
         assert_eq!(grammar.follow(NonTerminal("E"), NonTerminal("E")), hash_set!["$", ")"]);
         assert_eq!(grammar.follow(NonTerminal("T"), NonTerminal("E")), hash_set!["+", "$", ")"]);
     }
