@@ -140,6 +140,13 @@ where
         //println!("stack: {:?}, input: {}", stack, input);
         match last_symbol {
             GrammarSymbol::Terminal(s) if s == input.0 => {
+
+                if let Some(token) = &input.1 {
+                    tree.get_mut(&last_node_id)
+                        .unwrap()
+                        .replace_data(token.describe());
+                }
+                
                 stack.pop().ok_or_else(|| "Empty stack!".to_string())?;
                 if !stack.is_empty() {
                     input = iter.next().ok_or_else(|| "No more tokens!".to_string())?;
