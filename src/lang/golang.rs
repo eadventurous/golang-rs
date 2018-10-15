@@ -350,7 +350,7 @@ impl<'a> Token<'a> for GoToken<'a> {
             _ => format!("{:?}", self),
         }
     }
-
+    /// used for grammar symbol matching at the syntax analysis phaze
     fn descriptor(&self) -> &'static str {
         unimplemented!()
     }

@@ -263,7 +263,21 @@ mod test {
         let result = parse_tokens(&grammar, NonTerminal("Code"), tokens_str);
         assert!(result.is_ok());
 
-        print_tree(&result.unwrap());
+        let tree = &result.unwrap();
+        let code_children_ids = tree
+            .get(tree.root_node_id().unwrap())
+            .unwrap()
+            .children();
+        let code_children: Vec<&String> = code_children_ids.iter()
+            .map(|n_id| tree.get(n_id).unwrap().data())
+            .collect();
+        assert_eq!(code_children, vec!["Command", "Code"]);
+        let command_children_ids = tree
+            .get(&code_children_ids[0])
+            .unwrap()
+            .children();
+        assert_eq!(tree.get(&command_children_ids[0]).unwrap().data(), "Input");
+        print_tree(tree);
 
         // let tree = result.unwrap();
         // print_tree(&tree);
