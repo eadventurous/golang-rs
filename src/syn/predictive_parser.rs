@@ -116,7 +116,11 @@ fn construct_table<'a>(
 pub fn parse_tokens<'a, 'b>(
     grammar: &'a Grammar,
     root_symbol: GrammarSymbol<'a>,
-    tokens: Vec<String>,
+    // TODO: change to `Vec<::lex::Token>` or even better to
+    // TODO: <'a, I, T>
+    // TODO:    where I: Iterator<Item=MetaResult<T>>,
+    // TODO:          T: Token<'a>
+    tokens: Vec<&str>,
 ) -> Result<Tree<String>, String> {
     let (table, symbol_map) = construct_table(grammar, root_symbol);
 
@@ -129,7 +133,7 @@ pub fn parse_tokens<'a, 'b>(
     let root_id: NodeId = tree.insert(Node::new(root_str.clone()), AsRoot)
                               .map_err(|e| format!("{}", e))?;
 
-    let mut iter = tokens.into_iter().chain(::std::iter::once("$".to_string()));
+    let mut iter = tokens.into_iter().chain(::std::iter::once("$"));
     let mut stack: Vec<(GrammarSymbol, NodeId)> = vec![
         (Terminal("$"), root_id.clone()),
         (root_symbol, root_id),
@@ -160,7 +164,7 @@ pub fn parse_tokens<'a, 'b>(
             _ => {
                 let i = *symbol_map.get(&last_symbol)
                                    .ok_or_else(|| format!("Non-terminal {:?} not found!", last_symbol))?;
-                let j = *symbol_map.get(&GrammarSymbol::Terminal(&*input))
+                let j = *symbol_map.get(&GrammarSymbol::Terminal(input))
                                    .ok_or_else(|| format!("Terminal {:?} not found!", input))?;
                 let prod = table[[i, j]].as_ref()
                                         .ok_or_else(|| format!(
@@ -245,7 +249,8 @@ mod test {
         let input = "id + id * id";
         let tokens = lexer.into_tokens(input).into_raw();
 
-        let tokens_str = tokens.map(|t| t.describe()).collect();
+        let tokens_str = tokens.map(|t| t.describe()).collect::<Vec<_>>();
+        let tokens_str = tokens_str.iter().map(AsRef::as_ref).collect();
         assert!(parse_tokens(&grammar, NonTerminal("E"), tokens_str).is_ok());
 
         /*println!("Pre-order:");
@@ -266,7 +271,8 @@ mod test {
         let input = ",[.-[-->++<]>+]";
         let tokens = lexer.into_tokens(input).into_raw();
 
-        let tokens_str = tokens.map(|t| t.describe()).collect();
+        let tokens_str = tokens.map(|t| t.describe()).collect::<Vec<_>>();
+        let tokens_str = tokens_str.iter().map(AsRef::as_ref).collect();
         println!("{:#?}", tokens_str);
         let result = parse_tokens(&grammar, NonTerminal("Code"), tokens_str);
         assert!(result.is_ok());
@@ -291,7 +297,8 @@ mod test {
         let input = "id + + * id";
         let tokens = lexer.into_tokens(input).into_raw();
 
-        let tokens_str = tokens.map(|t| t.describe()).collect();
+        let tokens_str = tokens.map(|t| t.describe()).collect::<Vec<_>>();
+        let tokens_str = tokens_str.iter().map(AsRef::as_ref).collect();
         assert!(parse_tokens(&grammar, NonTerminal("E"), tokens_str).is_err());
     }
 }
