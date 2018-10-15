@@ -82,6 +82,7 @@ impl<T> IsNotEpsilon for T where T: IsEpsilon {}
 #[derive(Clone, Debug)]
 pub struct GrammarProduction<'a>(pub GrammarSymbol<'a>, pub Vec<GrammarSymbol<'a>>);
 
+#[derive(Debug)]
 pub struct GrammarRule<'a, 'b> {
     pub name: &'a str,
     /// Alternatives, each in its own sub-vector.
@@ -172,6 +173,7 @@ impl<'a, 'b> GrammarRule<'a, 'b> {
     }
 }
 
+#[derive(Debug)]
 pub struct Grammar<'a, 'b> {
     pub rules: Vec<GrammarRule<'a, 'b>>,
 }

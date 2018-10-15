@@ -249,13 +249,17 @@ mod test {
             <Command> ::= "Inc" | "Dec" | "Left" | "Right" | "Input" | "Output" | "Cond" <Code> "Loop" | "Comment"
         "#;
         let grammar = Grammar::from_str(source).unwrap();
+        println!("{:#?}", grammar);
         let lexer = brainfuck::make_lexer();
         let input = ",[.-[-->++<]>+]";
         let tokens = lexer.into_tokens(input).into_raw();
 
         let tokens_str = tokens.map(|t| t.describe()).collect();
+        println!("{:#?}", tokens_str);
         let result = parse_tokens(&grammar, NonTerminal("Code"), tokens_str);
         assert!(result.is_ok());
+
+        print_tree(&result.unwrap());
 
         // let tree = result.unwrap();
         // print_tree(&tree);
