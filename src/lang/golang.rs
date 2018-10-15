@@ -352,7 +352,95 @@ impl<'a> Token<'a> for GoToken<'a> {
     }
     /// used for grammar symbol matching at the syntax analysis phaze
     fn descriptor(&self) -> &'static str {
-        unimplemented!()
+        match *self {
+            Ident(_) => "Ident",
+            Keyword(ref kw) => match kw {
+                GoKeyword::Break => "Break",
+                GoKeyword::Default => "Default",
+                GoKeyword::Func => "Func",
+                GoKeyword::Interface => "Interface",
+                GoKeyword::Select => "Select",
+                GoKeyword::Case => "Case",
+                GoKeyword::Defer => "Defer",
+                GoKeyword::Go => "Go",
+                GoKeyword::Map => "Map",
+                GoKeyword::Struct => "Struct",
+                GoKeyword::Chan => "Chan",
+                GoKeyword::Else => "Else",
+                GoKeyword::Goto => "Goto",
+                GoKeyword::Package => "Package",
+                GoKeyword::Switch => "Switch",
+                GoKeyword::Const => "Const",
+                GoKeyword::Fallthrough => "Fallthrough",
+                GoKeyword::If => "If",
+                GoKeyword::Range => "Range",
+                GoKeyword::Type => "Type",
+                GoKeyword::Continue => "Continue",
+                GoKeyword::For => "For",
+                GoKeyword::Import => "Import",
+                GoKeyword::Return => "Return",
+                GoKeyword::Var => "Var",
+            },
+            Operator(ref op) => match op {
+                GoOperator::Add => "Add",
+                GoOperator::Sub => "Sub",
+                GoOperator::Mul => "Mul",
+                GoOperator::Quo => "Quo",
+                GoOperator::Rem => "Rem",
+
+                GoOperator::And => "And",
+                GoOperator::Or => "Or",
+                GoOperator::Xor => "Xor",
+                GoOperator::Shl => "Shl",
+                GoOperator::Shr => "Shr",
+                GoOperator::AndNot => "AndNot",
+
+                GoOperator::AddAssign => "AddAssign",
+                GoOperator::SubAssign => "SubAssign",
+                GoOperator::QuoAssign => "QuoAssign",
+                GoOperator::RemAssign => "RemAssign",
+                GoOperator::MulAssign => "MulAssign",
+
+                GoOperator::AndAssign => "AndAssign",
+                GoOperator::OrAssign => "OrAssign",
+                GoOperator::XorAssign => "XorAssign",
+                GoOperator::ShlAssign => "ShlAssign",
+                GoOperator::ShrAssign => "ShrAssign",
+                GoOperator::AndNotAssign => "AndNotAssign",
+
+                GoOperator::LAnd => "LAnd",
+                GoOperator::LOr => "LOr",
+                GoOperator::Arrow => "Arrow",
+                GoOperator::Inc => "Inc",
+                GoOperator::Dec => "Dec",
+
+                GoOperator::Eql => "Eql",
+                GoOperator::Lss => "Lss",
+                GoOperator::Gtr => "Gtr",
+                GoOperator::Assign => "Assign",
+                GoOperator::Not => "Not",
+
+                GoOperator::NEq => "NEq",
+                GoOperator::LEq => "LEq",
+                GoOperator::GEq => "GEq",
+                GoOperator::Define => "Define",
+                GoOperator::Ellipsis => "Ellipsis",
+
+                GoOperator::LParen => "LParen",
+                GoOperator::LBrack => "LBrack",
+                GoOperator::LBrace => "LBrace",
+                GoOperator::Comma => "Comma",
+                GoOperator::Period => "Period",
+
+                GoOperator::RParen => "RParen",
+                GoOperator::RBrack => "RBrack",
+                GoOperator::RBrace => "RBrace",
+                GoOperator::Semicolon => "Semicolon",
+                GoOperator::Colon => "Colon",
+            },
+            Literal(_) => "Literal",
+            Comment(_) => "Comment",
+        }
     }
 }
 
