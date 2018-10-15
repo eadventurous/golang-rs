@@ -108,10 +108,6 @@ fn construct_table<'a>(
 ///
 /// `Ok(`[`Tree`]`)` whose root element is `root_symbol` or `Err()` with string description.
 ///
-/// # Note
-///
-/// Children of tree are left in reverse order.
-///
 /// [`Tree`]: https://docs.rs/id_tree/1.3.0/id_tree/struct.Tree.html
 pub fn parse_tokens<'a, 'b>(
     grammar: &'a Grammar,
@@ -178,15 +174,22 @@ pub fn parse_tokens<'a, 'b>(
                 stack.pop()
                      .ok_or_else(|| "Empty stack!".to_string())?;
 
-                for &symbol in prod.1.iter().rev().filter(IsNotEpsilon::is_not_epsilon) {
-                    let node_id = tree
-                        .insert(
-                            Node::new(symbol.to_str()),
-                            UnderNode(&last_node_id),
-                        )
-                        .map_err(|e| format!("{}", e))?;
-                    stack.push((symbol, node_id));
-                }
+                let symbols_and_ids: Vec<(GrammarSymbol, NodeId)> = prod
+                    .1
+                    .iter()
+                    .filter(IsNotEpsilon::is_not_epsilon)
+                    .map(|symbol| {
+                        tree
+                            .insert(
+                                Node::new(symbol.to_str()),
+                                UnderNode(&last_node_id),
+                            )
+                            .map(|id| (*symbol, id))
+                            .map_err(|e| format!("{}", e))
+                    })
+                    .collect::<Result<_, String>>()?;
+
+                stack.extend(symbols_and_ids.into_iter().rev());
             }
         }
     }
@@ -205,7 +208,7 @@ mod test {
             let tick = ['-', '+', '*'][level % 3];
             println!("{}{} {}", indent, tick, node.data());
 
-            for child in node.children().iter().rev() {
+            for child in node.children().iter() {
                 let child = tree.get(child).unwrap();
                 inner(tree, child, level + 1);
             }
@@ -271,8 +274,7 @@ mod test {
         let input = ",[.-[-->++<]>+]";
         let tokens = lexer.into_tokens(input).into_raw();
 
-        let tokens_str = tokens.map(|t| t.describe()).collect::<Vec<_>>();
-        let tokens_str = tokens_str.iter().map(AsRef::as_ref).collect();
+        let tokens_str = tokens.map(|t| t.descriptor()).collect::<Vec<_>>();
         println!("{:#?}", tokens_str);
         let result = parse_tokens(&grammar, NonTerminal("Code"), tokens_str);
         assert!(result.is_ok());
