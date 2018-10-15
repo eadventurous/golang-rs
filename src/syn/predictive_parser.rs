@@ -101,6 +101,18 @@ fn construct_table<'a>(
     (table, symbol_map)
 }
 
+/// Parse vector of string tokens according to given `grammar`.
+/// Starts from `root_symbol` which must be one of `grammar`'s non-terminals.
+///
+/// # Returns
+///
+/// `Ok(`[`Tree`]`)` whose root element is `root_symbol` or `Err()` with string description.
+///
+/// # Note
+///
+/// Children of tree are left in reverse order.
+///
+/// [`Tree`]: https://docs.rs/id_tree/1.3.0/id_tree/struct.Tree.html
 pub fn parse_tokens<'a, 'b>(
     grammar: &'a Grammar,
     root_symbol: GrammarSymbol<'a>,
@@ -189,7 +201,7 @@ mod test {
             let tick = ['-', '+', '*'][level % 3];
             println!("{}{} {}", indent, tick, node.data());
 
-            for child in node.children() {
+            for child in node.children().iter().rev() {
                 let child = tree.get(child).unwrap();
                 inner(tree, child, level + 1);
             }
