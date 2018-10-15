@@ -32,7 +32,7 @@ use super::bnf::*;
 use id_tree::InsertBehavior::*;
 use id_tree::*;
 #[allow(unused)]
-use lex::{Token, TokensExt};
+use lex::{MetaResult, Token, TokensExt};
 use ndarray::Array2;
 use std::collections::HashMap;
 
@@ -103,15 +103,15 @@ fn construct_table<'a>(
 /// `Ok(`[`Tree`]`)` whose root element is `root_symbol` or `Err()` with string description.
 ///
 /// [`Tree`]: https://docs.rs/id_tree/1.3.0/id_tree/struct.Tree.html
-pub fn parse_tokens<'a, 'b>(
+pub fn parse_tokens<'a, 'b, I, T>(
     grammar: &'a Grammar,
     root_symbol: GrammarSymbol<'a>,
-    // TODO: change to `Vec<::lex::Token>` or even better to
-    // TODO: <'a, I, T>
-    // TODO:    where I: Iterator<Item=MetaResult<T>>,
-    // TODO:          T: Token<'a>
-    tokens: Vec<&str>,
-) -> Result<Tree<String>, String> {
+    tokens: I,
+) -> Result<Tree<String>, String>
+where
+    I: Iterator<Item = MetaResult<'a, T>>,
+    T: Token<'a>,
+{
     let (table, symbol_map) = construct_table(grammar, root_symbol);
 
     //construct tree
@@ -123,8 +123,12 @@ pub fn parse_tokens<'a, 'b>(
     let root_id: NodeId = tree
         .insert(Node::new(root_str.clone()), AsRoot)
         .map_err(|e| format!("{}", e))?;
-
-    let mut iter = tokens.into_iter().chain(::std::iter::once("$"));
+    let tokens_str = tokens
+        .map(|t| {
+            let token = t.unwrap().token;
+            (token.descriptor(), Some(token))
+        }).collect::<Vec<_>>();
+    let mut iter = tokens_str.into_iter().chain(::std::iter::once(("$", None)));
     let mut stack: Vec<(GrammarSymbol, NodeId)> =
         vec![(Terminal("$"), root_id.clone()), (root_symbol, root_id)];
 
@@ -135,7 +139,7 @@ pub fn parse_tokens<'a, 'b>(
     while let Some((last_symbol, last_node_id)) = stack.last().cloned() {
         //println!("stack: {:?}, input: {}", stack, input);
         match last_symbol {
-            GrammarSymbol::Terminal(s) if s == input => {
+            GrammarSymbol::Terminal(s) if s == input.0 => {
                 stack.pop().ok_or_else(|| "Empty stack!".to_string())?;
                 if !stack.is_empty() {
                     input = iter.next().ok_or_else(|| "No more tokens!".to_string())?;
@@ -151,12 +155,12 @@ pub fn parse_tokens<'a, 'b>(
                     .get(&last_symbol)
                     .ok_or_else(|| format!("Non-terminal {:?} not found!", last_symbol))?;
                 let j = *symbol_map
-                    .get(&GrammarSymbol::Terminal(input))
+                    .get(&GrammarSymbol::Terminal(input.0))
                     .ok_or_else(|| format!("Terminal {:?} not found!", input))?;
                 let prod = table[[i, j]].as_ref().ok_or_else(|| {
                     format!(
                         "No grammar rule for {:?} given {} at token number {}",
-                        last_symbol, input, i
+                        last_symbol, input.0, i
                     )
                 })?;
                 //println!("{:?}", prod);
@@ -226,19 +230,19 @@ mod test {
     fn test_parser_expr() {
         let source = r#"
             <E> ::= <T> <E'>
-            <E'> ::= "Operator(Add)" <T> <E'> | ""
+            <E'> ::= "Add" <T> <E'> | ""
             <T> ::= <F> <T'>
-            <T'> ::= "Operator(Mul)" <F> <T'> | ""
-            <F> ::= "(" <E> ")" | "id"
+            <T'> ::= "Mul" <F> <T'> | ""
+            <F> ::= "(" <E> ")" | "Ident"
         "#;
         let grammar = Grammar::from_str(source).unwrap();
         let lexer = golang::make_lexer();
         let input = "id + id * id";
-        let tokens = lexer.into_tokens(input).into_raw();
+        let tokens = lexer.into_tokens(input);
+        let result = parse_tokens(&grammar, NonTerminal("E"), tokens.into_iter());
+        assert!(result.is_ok());
 
-        let tokens_str = tokens.map(|t| t.describe()).collect::<Vec<_>>();
-        let tokens_str = tokens_str.iter().map(AsRef::as_ref).collect();
-        assert!(parse_tokens(&grammar, NonTerminal("E"), tokens_str).is_ok());
+        print_tree(&result.unwrap());
 
         /*println!("Pre-order:");
         for node in tree.traverse_pre_order(tree.root_node_id().unwrap()).unwrap() {
@@ -256,26 +260,18 @@ mod test {
         println!("{:#?}", grammar);
         let lexer = brainfuck::make_lexer();
         let input = ",[.-[-->++<]>+]";
-        let tokens = lexer.into_tokens(input).into_raw();
-
-        let tokens_str = tokens.map(|t| t.descriptor()).collect::<Vec<_>>();
-        println!("{:#?}", tokens_str);
-        let result = parse_tokens(&grammar, NonTerminal("Code"), tokens_str);
+        let tokens = lexer.into_tokens(input);
+        let result = parse_tokens(&grammar, NonTerminal("Code"), tokens);
         assert!(result.is_ok());
 
         let tree = &result.unwrap();
-        let code_children_ids = tree
-            .get(tree.root_node_id().unwrap())
-            .unwrap()
-            .children();
-        let code_children: Vec<&String> = code_children_ids.iter()
+        let code_children_ids = tree.get(tree.root_node_id().unwrap()).unwrap().children();
+        let code_children: Vec<&String> = code_children_ids
+            .iter()
             .map(|n_id| tree.get(n_id).unwrap().data())
             .collect();
         assert_eq!(code_children, vec!["Command", "Code"]);
-        let command_children_ids = tree
-            .get(&code_children_ids[0])
-            .unwrap()
-            .children();
+        let command_children_ids = tree.get(&code_children_ids[0]).unwrap().children();
         assert_eq!(tree.get(&command_children_ids[0]).unwrap().data(), "Input");
         print_tree(tree);
 
@@ -295,10 +291,7 @@ mod test {
         let grammar = Grammar::from_str(source).unwrap();
         let lexer = golang::make_lexer();
         let input = "id + + * id";
-        let tokens = lexer.into_tokens(input).into_raw();
-
-        let tokens_str = tokens.map(|t| t.describe()).collect::<Vec<_>>();
-        let tokens_str = tokens_str.iter().map(AsRef::as_ref).collect();
-        assert!(parse_tokens(&grammar, NonTerminal("E"), tokens_str).is_err());
+        let tokens = lexer.into_tokens(input);
+        assert!(parse_tokens(&grammar, NonTerminal("E"), tokens).is_err());
     }
 }
