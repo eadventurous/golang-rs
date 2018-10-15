@@ -65,21 +65,21 @@ fn construct_table<'a>(
 
     for rule in grammar.rules.iter() {
         for prod in rule.expression.iter() {
-            let first_a = grammar.first(prod.clone());
-            for &a in first_a.iter() {
-                if a != "" {
-                    let i = symbol_map[&GrammarSymbol::NonTerminal(rule.name)];
-                    let j = symbol_map[&GrammarSymbol::Terminal(a)];
-                    table[[i, j]] = Some(GrammarProduction(
-                        GrammarSymbol::NonTerminal(rule.name),
-                        prod.clone(),
-                    ));
-                }
+            #[allow(non_snake_case)]
+            let first_A = grammar.first(prod.clone());
+            for &a in first_A.iter().filter(IsNotEpsilon::is_not_epsilon) {
+                let i = symbol_map[&GrammarSymbol::NonTerminal(rule.name)];
+                let j = symbol_map[&GrammarSymbol::Terminal(a)];
+                table[[i, j]] = Some(GrammarProduction(
+                    GrammarSymbol::NonTerminal(rule.name),
+                    prod.clone(),
+                ));
             }
-            if first_a.contains(&"") {
+            if first_A.contains(&"") {
                 #[allow(non_snake_case)]
                 let follow_A = grammar.follow(GrammarSymbol::NonTerminal(rule.name), start_symbol);
                 let i = symbol_map[&GrammarSymbol::NonTerminal(rule.name)];
+
                 if follow_A.contains(&"$") {
                     let j = symbol_map[&GrammarSymbol::Terminal("$")];
                     table[[i, j]] = Some(GrammarProduction(
@@ -87,14 +87,13 @@ fn construct_table<'a>(
                         prod.clone(),
                     ));
                 }
-                for &b in follow_A.iter() {
-                    if b != "" {
-                        let j = symbol_map[&GrammarSymbol::Terminal(b)];
-                        table[[i, j]] = Some(GrammarProduction(
-                            GrammarSymbol::NonTerminal(rule.name),
-                            prod.clone(),
-                        ));
-                    }
+
+                for &b in follow_A.iter().filter(IsNotEpsilon::is_not_epsilon) {
+                    let j = symbol_map[&GrammarSymbol::Terminal(b)];
+                    table[[i, j]] = Some(GrammarProduction(
+                        GrammarSymbol::NonTerminal(rule.name),
+                        prod.clone(),
+                    ));
                 }
             }
         }
@@ -163,7 +162,7 @@ pub fn parse_tokens<'a, 'b>(
                 stack.pop()
                      .ok_or_else(|| "Empty stack!".to_string())?;
 
-                for &symbol in prod.1.iter().rev().filter(|s| !s.is_epsilon()) {
+                for &symbol in prod.1.iter().rev().filter(IsNotEpsilon::is_not_epsilon) {
                     let node_id = tree
                         .insert(
                             Node::new(symbol.to_str()),

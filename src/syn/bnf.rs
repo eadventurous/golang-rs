@@ -46,12 +46,38 @@ impl<'a> GrammarSymbol<'a> {
         };
         s.to_string()
     }
+}
 
+pub trait IsEpsilon {
     /// Is this an empty production symbol, epsilon?
-    pub fn is_epsilon(self) -> bool {
-        self == Terminal("")
+    fn is_epsilon(&self) -> bool;
+}
+
+pub trait IsNotEpsilon: IsEpsilon {
+    /// Opposite to `IsEpsilon`.
+    fn is_not_epsilon(&self) -> bool { !self.is_epsilon() }
+}
+
+impl<'a> IsEpsilon for GrammarSymbol<'a> {
+    fn is_epsilon(&self) -> bool {
+        *self == Terminal("")
     }
 }
+
+impl<'a, 'b> IsEpsilon for &'b GrammarSymbol<'a> {
+    fn is_epsilon(&self) -> bool {
+        IsEpsilon::is_epsilon(*self)
+    }
+}
+
+impl<S> IsEpsilon for S where S: AsRef<str> {
+    fn is_epsilon(&self) -> bool {
+        self.as_ref().is_empty()
+    }
+}
+
+impl<T> IsNotEpsilon for T where T: IsEpsilon {}
+
 
 #[derive(Clone, Debug)]
 pub struct GrammarProduction<'a>(pub GrammarSymbol<'a>, pub Vec<GrammarSymbol<'a>>);
@@ -180,7 +206,7 @@ impl<'a, 'b> Grammar<'a, 'b> {
                     if !follow_symbols.is_empty() {
                         let first_beta = self.first(follow_symbols.to_vec());
 
-                        set.extend(non_empties(first_beta.iter()));
+                        set.extend(first_beta.iter().filter(IsNotEpsilon::is_not_epsilon));
 
                         if first_beta.contains(&"") {
                             has_empty = true;
@@ -218,7 +244,7 @@ impl<'a, 'b> Grammar<'a, 'b> {
                         for symbol in prod.iter() {
                             let s_first = self.first(vec![*symbol]);
 
-                            x_set.extend(non_empties(s_first.iter()));
+                            x_set.extend(s_first.iter().filter(IsNotEpsilon::is_not_epsilon));
 
                             if !s_first.contains(&"") {
                                 break;
@@ -232,9 +258,9 @@ impl<'a, 'b> Grammar<'a, 'b> {
                     }
                 }
             };
-            let contains_empty = x_set.contains(&"");
+            let contains_epsilon = x_set.contains(&"");
             set.extend(x_set);
-            if !contains_empty {
+            if !contains_epsilon {
                 break;
             }
         }
