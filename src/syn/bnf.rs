@@ -136,9 +136,23 @@ fn make_lexer<'a>() -> Lexer<'a, BnfToken<'a>> {
         .build()
 }
 
-impl<'a> Token<'a> for BnfToken<'a> {}
+impl<'a> Token<'a> for BnfToken<'a> {
+    fn descriptor(&self) -> &'static str {
+        match *self {
+            BnfToken::Terminal(..) => "Terminal",
+            BnfToken::NonTerminal(..) => "NonTerminal",
+            BnfToken::Operator(BnfOperator::Equals) => "::=",
+            BnfToken::Operator(BnfOperator::Alt) => "|",
+        }
+    }
+}
 
 impl<'a, 'b> GrammarRule<'a, 'b> {
+    /// ```bnf
+    /// <Rule> ::= <Name> "::=" <Productions>
+    /// <Name> ::= <Terminal>
+    /// ...
+    /// ```
     fn from_str(s: &str) -> Result<GrammarRule, &'static str> {
         let lexer = make_lexer();
         let mut tokens = lexer.into_tokens(s).into_raw();

@@ -260,9 +260,47 @@ impl<'a, T> LexerBuilder<'a, T>
 
 
 pub trait Token<'a>: Ord + Debug + Sized {
+    /// Pretty-print token. Fallbacks to `Debug` implementation.
     fn describe(&self) -> String {
         format!("{:?}", self)
     }
+
+    /// Generic content-agnostic descriptor of a token's kind.
+    ///
+    /// Lifetime is intentionally `'static`, so that set of all possible descriptors must be known
+    /// at compile-time. Each particular token kind must provide unique descriptor (within its
+    /// domain).
+    ///
+    /// # Examples
+    ///
+    /// Consider lexical domain:
+    ///
+    /// ```rust
+    /// enum MyToken {
+    ///     Ruler,
+    ///     Text(String),
+    /// }
+    /// ```
+    ///
+    /// Although `MyToken::Text` may vary greatly, we consider all `MyToken::Text(..)` instances to
+    /// be the same kind, namely `"text"`. Thus we end up with two descriptors: `"ruler"` and
+    /// `"text"`.
+    ///
+    /// We __may__ further match on `Text` content if it is needed:
+    ///
+    /// ```rust
+    /// # impl<'a> Token<'a> for MyToken {
+    /// fn descriptor(&self) -> &'static str {
+    ///     match *self {
+    ///         MyToken::Ruler => "ruler",
+    ///         MyToken::Text(text) => {
+    ///             if text.lines().count() <= 1 { "single" } else { "multi" }
+    ///         }
+    ///     }
+    /// }
+    /// # }
+    /// ```
+    fn descriptor(&self) -> &'static str;
 }
 
 

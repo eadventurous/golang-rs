@@ -15,7 +15,21 @@ pub enum BfToken<'a> {
     Comment(&'a str),
 }
 
-impl<'a> Token<'a> for BfToken<'a> {}
+impl<'a> Token<'a> for BfToken<'a> {
+    fn descriptor(&self) -> &'static str {
+        match *self {
+            Left => "Left",
+            Right => "Right",
+            Cond => "Cond",
+            Loop => "Loop",
+            Input => "Input",
+            Output => "Output",
+            Inc => "Inc",
+            Dec => "Dec",
+            Comment(..) => "Comment",
+        }
+    }
+}
 
 
 pub fn make_lexer<'a>() -> Lexer<'a, BfToken<'a>> {

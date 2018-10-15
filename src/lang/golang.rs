@@ -340,6 +340,10 @@ impl<'a> Token<'a> for GoToken<'a> {
             _ => format!("{:?}", self),
         }
     }
+
+    fn descriptor(&self) -> &'static str {
+        unimplemented!()
+    }
 }
 
 
