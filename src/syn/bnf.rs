@@ -28,8 +28,8 @@
 //!
 //!
 //! ```
-use ::lex::{Lexer, LexerBuilder, Token, TokensExt};
 pub use self::GrammarSymbol::*;
+use lex::{Lexer, LexerBuilder, Token, TokensExt};
 use std::collections::HashSet;
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug, Hash)]
@@ -55,7 +55,9 @@ pub trait IsEpsilon {
 
 pub trait IsNotEpsilon: IsEpsilon {
     /// Opposite to `IsEpsilon`.
-    fn is_not_epsilon(&self) -> bool { !self.is_epsilon() }
+    fn is_not_epsilon(&self) -> bool {
+        !self.is_epsilon()
+    }
 }
 
 impl<'a> IsEpsilon for GrammarSymbol<'a> {
@@ -70,14 +72,16 @@ impl<'a, 'b> IsEpsilon for &'b GrammarSymbol<'a> {
     }
 }
 
-impl<S> IsEpsilon for S where S: AsRef<str> {
+impl<S> IsEpsilon for S
+where
+    S: AsRef<str>,
+{
     fn is_epsilon(&self) -> bool {
         self.as_ref().is_empty()
     }
 }
 
 impl<T> IsNotEpsilon for T where T: IsEpsilon {}
-
 
 #[derive(Clone, Debug)]
 pub struct GrammarProduction<'a>(pub GrammarSymbol<'a>, pub Vec<GrammarSymbol<'a>>);
@@ -129,11 +133,9 @@ fn make_lexer<'a>() -> Lexer<'a, BnfToken<'a>> {
         .add(r"\|", constant(BnfToken::Operator(BnfOperator::Alt)))
         .add(r"<(.+?)>", |c| {
             BnfToken::NonTerminal(c.get(1).unwrap().as_str())
-        })
-        .add("\"(.*?)\"", |c| {
+        }).add("\"(.*?)\"", |c| {
             BnfToken::Terminal(c.get(1).unwrap().as_str())
-        })
-        .build()
+        }).build()
 }
 
 impl<'a> Token<'a> for BnfToken<'a> {
@@ -159,7 +161,7 @@ impl<'a, 'b> GrammarRule<'a, 'b> {
 
         let name = match tokens.next() {
             Some(BnfToken::NonTerminal(s)) => s,
-            _ => Err("NonTerminal expected at the start of the rule.")?
+            _ => Err("NonTerminal expected at the start of the rule.")?,
         };
 
         if tokens.next() != Some(BnfToken::Operator(BnfOperator::Equals)) {
@@ -192,7 +194,7 @@ pub struct Grammar<'a, 'b> {
     pub rules: Vec<GrammarRule<'a, 'b>>,
 }
 
-fn non_empties<'a, S: AsRef<str>>(iter: impl Iterator<Item=S>) -> impl Iterator<Item=S> {
+fn non_empties<'a, S: AsRef<str>>(iter: impl Iterator<Item = S>) -> impl Iterator<Item = S> {
     iter.filter(|s| !s.as_ref().trim().is_empty())
 }
 
@@ -244,13 +246,15 @@ impl<'a, 'b> Grammar<'a, 'b> {
     }
 
     pub fn first(&self, tokens: Vec<GrammarSymbol<'b>>) -> HashSet<&'b str> {
-        let mut set = hash_set! {};
+        let mut set = hash_set!{};
 
         for token in tokens {
-            let mut x_set = hash_set! {};
+            let mut x_set = hash_set!{};
 
             match token {
-                Terminal(s) => { x_set.insert(s); }
+                Terminal(s) => {
+                    x_set.insert(s);
+                }
                 NonTerminal(name) => {
                     let rule = self.get_rule(name).unwrap();
 
@@ -407,7 +411,13 @@ mod test {
             <F> ::= "(" <E> ")" | "id"
         "#;
         let grammar = Grammar::from_str(source).unwrap();
-        assert_eq!(grammar.follow(NonTerminal("E"), NonTerminal("E")), hash_set!["$", ")"]);
-        assert_eq!(grammar.follow(NonTerminal("T"), NonTerminal("E")), hash_set!["+", "$", ")"]);
+        assert_eq!(
+            grammar.follow(NonTerminal("E"), NonTerminal("E")),
+            hash_set!["$", ")"]
+        );
+        assert_eq!(
+            grammar.follow(NonTerminal("T"), NonTerminal("E")),
+            hash_set!["+", "$", ")"]
+        );
     }
 }

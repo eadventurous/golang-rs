@@ -7,10 +7,10 @@ use std::io::Read;
 
 // import macros before anything else
 pub mod macros;
+// ...
 pub mod lang;
 pub mod lex;
 pub mod syn;
-
 
 /// Fancy tokens printer.
 pub fn print_tokens<'a, T: Token<'a>, I: MetaIter<'a, T>>(tokens: I) {

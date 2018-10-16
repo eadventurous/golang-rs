@@ -28,13 +28,13 @@
 //!
 //!
 //! ```
-#[allow(unused)]
-use ::lex::{Token, TokensExt};
-use id_tree::*;
+use super::bnf::*;
 use id_tree::InsertBehavior::*;
+use id_tree::*;
+#[allow(unused)]
+use lex::{Token, TokensExt};
 use ndarray::Array2;
 use std::collections::HashMap;
-use super::bnf::*;
 
 fn construct_table<'a>(
     grammar: &'a Grammar,
@@ -48,18 +48,12 @@ fn construct_table<'a>(
     let non_terminals = grammar.get_non_terminals();
     let non_terminals_len = non_terminals.len();
 
-    let mut symbol_map = hash_map! {};
+    let mut symbol_map = hash_map!{};
 
     // map terminals and non-terminals onto their indices
-    symbol_map.extend(terminals
-        .into_iter()
-        .enumerate()
-        .map(|(i, t)| (t, i)));
+    symbol_map.extend(terminals.into_iter().enumerate().map(|(i, t)| (t, i)));
 
-    symbol_map.extend(non_terminals
-        .into_iter()
-        .enumerate()
-        .map(|(i, t)| (t, i)));
+    symbol_map.extend(non_terminals.into_iter().enumerate().map(|(i, t)| (t, i)));
 
     let mut table = Array2::from_elem((non_terminals_len, terminals_len), None);
 
@@ -126,14 +120,13 @@ pub fn parse_tokens<'a, 'b>(
         .build();
 
     let root_str = root_symbol.to_str();
-    let root_id: NodeId = tree.insert(Node::new(root_str.clone()), AsRoot)
-                              .map_err(|e| format!("{}", e))?;
+    let root_id: NodeId = tree
+        .insert(Node::new(root_str.clone()), AsRoot)
+        .map_err(|e| format!("{}", e))?;
 
     let mut iter = tokens.into_iter().chain(::std::iter::once("$"));
-    let mut stack: Vec<(GrammarSymbol, NodeId)> = vec![
-        (Terminal("$"), root_id.clone()),
-        (root_symbol, root_id),
-    ];
+    let mut stack: Vec<(GrammarSymbol, NodeId)> =
+        vec![(Terminal("$"), root_id.clone()), (root_symbol, root_id)];
 
     let mut i = 1;
     let mut input = iter.next().unwrap(); // Never empty. At least `chain` provides one "$" string.
@@ -143,51 +136,42 @@ pub fn parse_tokens<'a, 'b>(
         //println!("stack: {:?}, input: {}", stack, input);
         match last_symbol {
             GrammarSymbol::Terminal(s) if s == input => {
-                stack.pop()
-                     .ok_or_else(|| "Empty stack!".to_string())?;
+                stack.pop().ok_or_else(|| "Empty stack!".to_string())?;
                 if !stack.is_empty() {
-                    input = iter.next()
-                                .ok_or_else(|| "No more tokens!".to_string())?;
+                    input = iter.next().ok_or_else(|| "No more tokens!".to_string())?;
                     i += 1;
                 }
             }
             GrammarSymbol::Terminal(s) => Err(format!(
                 "Expected {:?}, got {} at token number {}",
-                last_symbol,
-                s,
-                i
+                last_symbol, s, i
             ))?,
             _ => {
-                let i = *symbol_map.get(&last_symbol)
-                                   .ok_or_else(|| format!("Non-terminal {:?} not found!", last_symbol))?;
-                let j = *symbol_map.get(&GrammarSymbol::Terminal(input))
-                                   .ok_or_else(|| format!("Terminal {:?} not found!", input))?;
-                let prod = table[[i, j]].as_ref()
-                                        .ok_or_else(|| format!(
-                                            "No grammar rule for {:?} given {} at token number {}",
-                                            last_symbol,
-                                            input,
-                                            i
-                                        ))?;
+                let i = *symbol_map
+                    .get(&last_symbol)
+                    .ok_or_else(|| format!("Non-terminal {:?} not found!", last_symbol))?;
+                let j = *symbol_map
+                    .get(&GrammarSymbol::Terminal(input))
+                    .ok_or_else(|| format!("Terminal {:?} not found!", input))?;
+                let prod = table[[i, j]].as_ref().ok_or_else(|| {
+                    format!(
+                        "No grammar rule for {:?} given {} at token number {}",
+                        last_symbol, input, i
+                    )
+                })?;
                 //println!("{:?}", prod);
 
-                stack.pop()
-                     .ok_or_else(|| "Empty stack!".to_string())?;
+                stack.pop().ok_or_else(|| "Empty stack!".to_string())?;
 
                 let symbols_and_ids: Vec<(GrammarSymbol, NodeId)> = prod
                     .1
                     .iter()
                     .filter(IsNotEpsilon::is_not_epsilon)
                     .map(|symbol| {
-                        tree
-                            .insert(
-                                Node::new(symbol.to_str()),
-                                UnderNode(&last_node_id),
-                            )
+                        tree.insert(Node::new(symbol.to_str()), UnderNode(&last_node_id))
                             .map(|id| (*symbol, id))
                             .map_err(|e| format!("{}", e))
-                    })
-                    .collect::<Result<_, String>>()?;
+                    }).collect::<Result<_, String>>()?;
 
                 stack.extend(symbols_and_ids.into_iter().rev());
             }
@@ -198,8 +182,8 @@ pub fn parse_tokens<'a, 'b>(
 
 #[cfg(test)]
 mod test {
-    use lang::{brainfuck, golang};
     use super::*;
+    use lang::{brainfuck, golang};
 
     #[allow(unused)]
     fn print_tree<T: ::std::fmt::Display>(tree: &Tree<T>) {

@@ -13,7 +13,6 @@ macro_rules! hash_set {
     }
 }
 
-
 /// Construct HashMap literal as `hash_map!{k1: v1, k2: v2}`.
 macro_rules! hash_map {
     ($($k: expr, $v: expr),*) => {{
@@ -29,8 +28,8 @@ macro_rules! hash_map {
 
 #[cfg(test)]
 mod test {
-    use ::std::collections::HashSet;
-    use ::std::collections::HashMap;
+    use std::collections::HashMap;
+    use std::collections::HashSet;
 
     #[test]
     fn test_hash_set() {
@@ -41,7 +40,7 @@ mod test {
         // trailing comma
         let _comma: HashSet<u32> = hash_set! {1, 2, 3,};
 
-        let empty: HashSet<u32> = hash_set! {};
+        let empty: HashSet<u32> = hash_set!{};
         assert!(empty.is_empty());
     }
 
@@ -58,7 +57,7 @@ mod test {
             "oranges", 1337  // no trailing comma
         };
 
-        let empty: HashMap<u32, ()> = hash_map! {};
+        let empty: HashMap<u32, ()> = hash_map!{};
         assert!(empty.is_empty());
     }
 }
