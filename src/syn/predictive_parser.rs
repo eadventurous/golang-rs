@@ -214,6 +214,7 @@ mod test {
             None => println!("Empty tree"),
         }
     }
+    use tree_util::*;
 
     #[test]
     fn test_table() {
@@ -245,17 +246,31 @@ mod test {
         "#;
         let grammar = Grammar::from_str(source).unwrap();
         let lexer = golang::make_lexer();
-        let input = "id + id * id";
+        let input = "one + two * three";
         let tokens = lexer.into_tokens(input);
-        let result = parse_tokens(&grammar, NonTerminal("E"), tokens);
-        assert!(result.is_ok());
+        let tree = parse_tokens(&grammar, NonTerminal("E"), tokens).unwrap();
 
-        print_tree(&result.unwrap());
+        let expected = tree!{
+          "E" => {
+            "T" => {
+              "F" => {
+                "one"},
+              "T'"},
+            "E'" => {
+              "Operator(Add)",
+              "T" => {
+                "F" => {
+                  "two"},
+                "T'" => {
+                  "Operator(Mul)"},
+                  "F" => {
+                    "tree"},
+                  "T'"},
+              "E'"}}
+        };
 
-        /*println!("Pre-order:");
-        for node in tree.traverse_pre_order(tree.root_node_id().unwrap()).unwrap() {
-            print!("{}, ", node.data());
-        }*/
+        // print_tree(&tree);
+        assert!(expected.eq(&tree));
     }
 
     #[test]
