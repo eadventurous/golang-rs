@@ -61,3 +61,32 @@ impl<'a> Token<'a> for BnfToken<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::BnfToken::*;
+    use super::BnfOperator::*;
+    use lex::TokensExt;
+
+    const SOURCE: &str = r#"
+        <A> ::= <B> | "c" <D>
+    "#;
+
+    const TOKENS: &[BnfToken] = &[
+        NonTerminal("A"),
+        Operator(Def),
+        NonTerminal("B"),
+        Operator(Alt),
+        Terminal("c"),
+        NonTerminal("D"),
+    ];
+
+    #[test]
+    fn test_lexer() {
+        let lexer = make_lexer();
+        let tokens: Vec<_> = lexer.into_tokens(SOURCE).into_raw().collect();
+
+        assert_eq!(tokens, TOKENS);
+    }
+}
