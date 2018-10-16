@@ -64,9 +64,9 @@ impl<'a> Token<'a> for BnfToken<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use super::BnfToken::*;
     use super::BnfOperator::*;
+    use super::BnfToken::*;
+    use super::*;
     use lex::TokensExt;
 
     const SOURCE: &str = r#"
