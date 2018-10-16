@@ -125,7 +125,7 @@ fn whitespace_filter(source: &str) -> &str {
     &source[source.len()..]
 }
 
-fn make_lexer<'a>() -> Lexer<'a, BnfToken<'a>> {
+pub fn make_lexer<'a>() -> Lexer<'a, BnfToken<'a>> {
     let constant = |x| move |_| x;
     LexerBuilder::new()
         .skip_whitespaces(whitespace_filter)
