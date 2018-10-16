@@ -123,12 +123,14 @@ where
     let root_id: NodeId = tree
         .insert(Node::new(root_str.clone()), AsRoot)
         .map_err(|e| format!("{}", e))?;
+
     let tokens_str = tokens
         .map(|t| {
             let token = t.unwrap().token;
             (token.descriptor(), Some(token))
         }).collect::<Vec<_>>();
     let mut iter = tokens_str.into_iter().chain(::std::iter::once(("$", None)));
+
     let mut stack: Vec<(GrammarSymbol, NodeId)> =
         vec![(Terminal("$"), root_id.clone()), (root_symbol, root_id)];
 
@@ -140,13 +142,12 @@ where
         //println!("stack: {:?}, input: {}", stack, input);
         match last_symbol {
             GrammarSymbol::Terminal(s) if s == input.0 => {
-
                 if let Some(token) = &input.1 {
                     tree.get_mut(&last_node_id)
                         .unwrap()
                         .replace_data(token.describe());
                 }
-                
+
                 stack.pop().ok_or_else(|| "Empty stack!".to_string())?;
                 if !stack.is_empty() {
                     input = iter.next().ok_or_else(|| "No more tokens!".to_string())?;
@@ -246,7 +247,7 @@ mod test {
         let lexer = golang::make_lexer();
         let input = "id + id * id";
         let tokens = lexer.into_tokens(input);
-        let result = parse_tokens(&grammar, NonTerminal("E"), tokens.into_iter());
+        let result = parse_tokens(&grammar, NonTerminal("E"), tokens);
         assert!(result.is_ok());
 
         print_tree(&result.unwrap());
