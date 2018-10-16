@@ -15,9 +15,9 @@ pub enum BnfToken<'a> {
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub enum BnfOperator {
-    /// "::="
-    Equals,
-    /// Alternative "|"
+    /// Definition `"::="`
+    Def,
+    /// Alternative `"|"`
     Alt,
 }
 
@@ -42,7 +42,7 @@ pub fn make_lexer<'a>() -> Lexer<'a, BnfToken<'a>> {
     let constant = |x| move |_| x;
     LexerBuilder::new()
         .skip_whitespaces(whitespace_filter)
-        .add(r"::=", constant(BnfToken::Operator(BnfOperator::Equals)))
+        .add(r"::=", constant(BnfToken::Operator(BnfOperator::Def)))
         .add(r"\|", constant(BnfToken::Operator(BnfOperator::Alt)))
         .add(r"<(.+?)>", |c| {
             BnfToken::NonTerminal(c.get(1).unwrap().as_str())
@@ -56,7 +56,7 @@ impl<'a> Token<'a> for BnfToken<'a> {
         match *self {
             BnfToken::Terminal(..) => "Terminal",
             BnfToken::NonTerminal(..) => "NonTerminal",
-            BnfToken::Operator(BnfOperator::Equals) => "::=",
+            BnfToken::Operator(BnfOperator::Def) => "::=",
             BnfToken::Operator(BnfOperator::Alt) => "|",
         }
     }

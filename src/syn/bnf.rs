@@ -109,7 +109,7 @@ impl<'a, 'b> GrammarRule<'a, 'b> {
             _ => Err("NonTerminal expected at the start of the rule.")?,
         };
 
-        if tokens.next() != Some(BnfToken::Operator(BnfOperator::Equals)) {
+        if tokens.next() != Some(BnfToken::Operator(BnfOperator::Def)) {
             Err("Equals sign expected after the first nonterminal.")?;
         }
 
