@@ -196,24 +196,6 @@ where
 mod test {
     use super::*;
     use lang::{brainfuck, golang};
-
-    #[allow(unused)]
-    fn print_tree<T: ::std::fmt::Display>(tree: &Tree<T>) {
-        fn inner<T: ::std::fmt::Display>(tree: &Tree<T>, node: &Node<T>, level: usize) {
-            let indent = "  ".repeat(level);
-            let tick = ['-', '+', '*'][level % 3];
-            println!("{}{} {}", indent, tick, node.data());
-
-            for child in node.children().iter() {
-                let child = tree.get(child).unwrap();
-                inner(tree, child, level + 1);
-            }
-        }
-        match tree.root_node_id().and_then(|id| tree.get(id).ok()) {
-            Some(node_id) => inner(tree, node_id, 0),
-            None => println!("Empty tree"),
-        }
-    }
     use tree_util::*;
 
     #[test]
@@ -269,7 +251,8 @@ mod test {
               "E'"}}
         };
 
-        // print_tree(&tree);
+        // println!("{}", TreeFmt(&tree));
+
         assert!(expected.eq(&tree));
     }
 
@@ -296,10 +279,8 @@ mod test {
         assert_eq!(code_children, vec!["Command", "Code"]);
         let command_children_ids = tree.get(&code_children_ids[0]).unwrap().children();
         assert_eq!(tree.get(&command_children_ids[0]).unwrap().data(), "Input");
-        print_tree(tree);
 
-        // let tree = result.unwrap();
-        // print_tree(&tree);
+        // println!("{}", TreeFmt(&tree));
     }
 
     #[test]
