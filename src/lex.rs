@@ -915,6 +915,22 @@ where
     }
 }
 
+pub fn is_whitespace(c: char) -> bool {
+    return c == 0x20 as char  // spaces (U+0020)
+        || c == 0x09 as char  // horizontal tabs (U+0009)
+        || c == 0x0d as char  // carriage returns (U+000D)
+        || c == 0x0a as char; // newlines (U+000A)
+}
+
+pub fn whitespace_filter(source: &str) -> &str {
+    for (i, c) in source.char_indices() {
+        if !is_whitespace(c) {
+            return &source[i..];
+        }
+    }
+    &source[source.len()..]
+}
+
 /// Little helper for tests.
 #[cfg(test)]
 pub fn token<'a, T: Token<'a>>(x: Option<Result<TokenMeta<T>, Error<'a, Bytes>>>) -> T {
