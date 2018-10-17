@@ -16,7 +16,7 @@ pub enum EbnfToken<'a> {
     NonTerminal(&'a str),
     Operator(EbnfOperator),
     Repeat(Side),
-    Option(Side),
+    Optional(Side),
     Group(Side),
 }
 
@@ -60,14 +60,32 @@ pub fn make_lexer<'a>() -> Lexer<'a, EbnfToken<'a>> {
         .add("\"(.*?)\"", |c| Terminal(c.get(1).unwrap().as_str()))
         .add(r"\{", constant!(Repeat(Start)))
         .add(r"\}", constant!(Repeat(End)))
-        .add(r"\[", constant!(Option(Start)))
-        .add(r"\]", constant!(Option(End)))
+        .add(r"\[", constant!(Optional(Start)))
+        .add(r"\]", constant!(Optional(End)))
         .add(r"\(", constant!(Group(Start)))
         .add(r"\)", constant!(Group(End)))
         .build()
 }
 
 impl<'a> Token<'a> for EbnfToken<'a> {
+    fn describe(&self) -> String {
+        match *self {
+            Terminal(t) => format!("\"{}\"", t),
+            NonTerminal(t) => format!("<{}>", t),
+            _ => match *self {
+                Operator(Def) => "::=",
+                Operator(Alt) => "|",
+                Repeat(Start) => "{",
+                Repeat(End) => "}",
+                Optional(Start) => "[",
+                Optional(End) => "]",
+                Group(Start) => "(",
+                Group(End) => ")",
+                _ => unreachable!(),
+            }.to_string(),
+        }
+    }
+
     fn descriptor(&self) -> &'static str {
         match *self {
             Terminal(..) => "Terminal",
@@ -76,8 +94,8 @@ impl<'a> Token<'a> for EbnfToken<'a> {
             Operator(Alt) => "|",
             Repeat(Start) => "{",
             Repeat(End) => "}",
-            Option(Start) => "[",
-            Option(End) => "]",
+            Optional(Start) => "[",
+            Optional(End) => "]",
             Group(Start) => "(",
             Group(End) => ")",
         }
@@ -103,9 +121,9 @@ mod tests {
         Terminal("c"),
         Repeat(End),
         Group(End),
-        Option(Start),
+        Optional(Start),
         NonTerminal("D"),
-        Option(End),
+        Optional(End),
     ];
 
     #[test]
