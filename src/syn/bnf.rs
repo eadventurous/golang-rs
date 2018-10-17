@@ -139,7 +139,7 @@ pub struct Grammar<'a, 'b> {
     pub rules: Vec<GrammarRule<'a, 'b>>,
 }
 
-fn non_empties<'a, S: AsRef<str>>(iter: impl Iterator<Item = S>) -> impl Iterator<Item = S> {
+pub fn non_empties<'a, S: AsRef<str>>(iter: impl Iterator<Item = S>) -> impl Iterator<Item = S> {
     iter.filter(|s| !s.as_ref().trim().is_empty())
 }
 

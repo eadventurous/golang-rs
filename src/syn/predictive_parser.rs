@@ -276,7 +276,9 @@ mod test {
         assert_eq!(code_children, vec!["Command", "Code"]);
 
         let mut code_children_ids = tree.children_ids(tree.root_node_id().unwrap()).unwrap();
-        let mut command_children_ids = tree.children_ids(&code_children_ids.next().unwrap()).unwrap();
+        let mut command_children_ids = tree
+            .children_ids(&code_children_ids.next().unwrap())
+            .unwrap();
         let first_command_node = tree.get(command_children_ids.next().unwrap()).unwrap();
 
         assert_eq!("Input", first_command_node.data());
