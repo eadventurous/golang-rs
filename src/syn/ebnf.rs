@@ -56,11 +56,8 @@ impl<'a> Syntax<'a> {
 }
 
 impl<'a> Rule<'a> {
-    pub fn new(name: &'a str) -> Self {
-        Rule {
-            name,
-            definitions: DefinitionList(vec![]),
-        }
+    pub fn new(name: &'a str, definitions: DefinitionList<'a>) -> Self {
+        Rule { name, definitions }
     }
 
     pub fn tokens(&self) -> Vec<EbnfToken<'a>> {
@@ -85,7 +82,7 @@ pub struct Parser<'a> {
 
 mod impls {
     use super::*;
-    use lex::{MetaResult, SimpleErrorBytes, Token, TokenMeta};
+    use lex::{MetaResult, SimpleErrorBytes, Span, Token, TokenMeta};
     use std::fmt::{self, Display, Formatter};
     use syn::bnf::non_empties;
 
@@ -182,31 +179,25 @@ mod impls {
             }
         }
 
-        pub fn parse<S>(
-            source: &'a str,
-            filename: &'a str,
-        ) -> Result<Syntax<'a>, SimpleErrorBytes> {
+        pub fn parse(source: &'a str) -> Result<Syntax<'a>, SimpleErrorBytes> {
             let mut rules = vec![];
 
             for line in non_empties(source.lines()) {
-                rules.push(Self::parse_rule(line, filename)?);
+                rules.push(Self::parse_rule(line)?);
             }
 
             Ok(Syntax { rules })
         }
 
-        pub fn parse_rule(
-            source: &'a str,
-            _filename: &'a str,
-        ) -> Result<Rule<'a>, SimpleErrorBytes> {
+        pub fn parse_rule(source: &'a str) -> Result<Rule<'a>, SimpleErrorBytes> {
             let iter = make_lexer().tokens(source);
             let mut this = Parser::new(source, iter);
 
             let name = this.expect_non_terminal()?;
             this.expect_exact(Operator(Def))?;
-            this.parse_alternatives(None)?;
+            let definitions = this.parse_alternatives(None)?;
 
-            Ok(Rule::new(name))
+            Ok(Rule::new(name, definitions))
         }
 
         fn parse_alternatives(
@@ -215,6 +206,7 @@ mod impls {
         ) -> Result<DefinitionList<'a>, SimpleErrorBytes> {
             let mut definitions = vec![];
             let mut def = vec![];
+
             while let Some(Ok(meta)) = self.next() {
                 match meta.token.clone() {
                     Terminal(t) => {
@@ -232,10 +224,12 @@ mod impls {
                         def.push(Primary::Grouped(list));
                     }
                     Optional(Start) => {
-                        // def.push(self.parse_optional());
+                        let list = self.parse_alternatives(Some(Nesting::Optional))?;
+                        def.push(Primary::Optional(list));
                     }
                     Repeat(Start) => {
-                        // def.push(self.parse_repeat());
+                        let list = self.parse_alternatives(Some(Nesting::Repeated))?;
+                        def.push(Primary::Repeated(list));
                     }
                     Group(End) if Some(Nesting::Grouped) == nesting => break,
                     Optional(End) if Some(Nesting::Optional) == nesting => break,
@@ -254,9 +248,14 @@ mod impls {
                 }
             }
             definitions.push(Definition(def));
-            match self.current() {
-                Some(Err(e)) => Err(e.clone().into()),
-                Some(Ok(..)) | None => Ok(DefinitionList(definitions)),
+            match (self.current(), nesting) {
+                (Some(Err(e)), _) => Err(e.clone().into()),
+                (Some(Ok(..)), _) | (None, None) => {
+                    // no more tokens nor nesting
+                    Ok(DefinitionList(definitions))
+                }
+                // no more tokens but nested groups left opened.
+                (None, Some(ref nesting)) => Err(self.error_expected(nesting.expected())),
             }
         }
 
@@ -298,7 +297,8 @@ mod impls {
                         .clone()
                         .and_then(|x| x.ok())
                         .map(|t| t.span)
-                        .unwrap_or(Default::default());
+                        .or_else(|| Span::over(self.source))
+                        .unwrap_or_default();
                     SimpleErrorBytes {
                         span,
                         description: None,
@@ -312,42 +312,196 @@ mod impls {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use lex::Error;
 
     const FILENAME: &str = "<test.bnf>";
 
     #[test]
     fn test_parse_expectation() {
         let source = r#"??? ::= <A> "B" <C>"#;
-        let filename = "invalid.txt";
-        let result = Parser::parse_rule(source, filename);
+        let result = Parser::parse_rule(source);
         assert!(result.is_err());
-        println!("{:?}", result.err().unwrap())
+        // println!("{:?}", result.err().unwrap())
     }
 
     #[test]
     fn test_parse_empty() {
-        let res = Parser::parse_rule("", FILENAME);
+        let source = " ";
+        let res = Parser::parse_rule(source);
         assert!(res.is_err());
 
         let err = res.err().unwrap();
-        println!("AAAAAAA: {:?}", err);
-        let err: ::lex::Error<_> = err.into();
-        let err = err.source("").filename(FILENAME);
-        println!("AAAAAAA:\n{}", err);
+        let err: Error<_> = err.into();
+        let err = err.source(source).filename(FILENAME);
+        // println!("AAAAAAA: {:?}", err);
+        // println!("AAAAAAA:\n{}", err);
+        let _ = err;
+    }
+
+    #[test]
+    fn test_parse_no_def() {
+        let source = "<A> <AC/DC> <EFG> ::= \"123\" ";
+        let res = Parser::parse_rule(source);
+        assert!(res.is_err());
+
+        let err: Error<_> = res.err().unwrap().into();
+        let err = err.source(source).filename(FILENAME);
+        // println!("AAA\n{:?}", err);
+        // println!("AAA\n{}", err);
+        let _ = err;
     }
 
     #[test]
     fn test_parse_epsilon() {
         let source = "<A> ::= ";
-        let res = Parser::parse_rule(source, FILENAME);
+        let res = Parser::parse_rule(source);
         assert!(res.is_ok());
 
         let rule = res.unwrap();
         assert_eq!("A", rule.name);
-        assert_eq!(rule.definitions.0, vec![]);
-        //        println!("BBBBBBB: {:?}", err);
-        //        let err: ::lex::Error<_> = err.into();
-        //        let err = err.source(source).filename(FILENAME);
-        //        println!("BBBBBBB\n{}", err);
+        assert_eq!(rule.definitions.0, vec![Definition(vec![])]);
+    }
+
+    #[test]
+    fn test_parse_simple_product() {
+        let source = r#" <A> ::= <B> "C" "#;
+        let res = Parser::parse_rule(source);
+        assert!(res.is_ok());
+
+        let rule = res.unwrap();
+        assert_eq!("A", rule.name);
+        assert_eq!(
+            rule.definitions.0,
+            vec![Definition(vec![
+                Primary::NonTerminal("B"),
+                Primary::Terminal("C")
+            ])]
+        );
+    }
+
+    #[test]
+    fn test_parse_alternatives() {
+        let source = r#" <A> ::= <B> | "#;
+        let res = Parser::parse_rule(source);
+        assert!(res.is_ok());
+
+        let rule = res.unwrap();
+        assert_eq!(rule.name, "A");
+        assert_eq!(
+            rule.definitions.0,
+            vec![
+                Definition(vec![Primary::NonTerminal("B")]),
+                Definition(vec![])
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_group() {
+        let source = r#" <A> ::= <B> ("c" | <D> <E> | "f") | "g" "#;
+        let res = Parser::parse_rule(source);
+        assert!(res.is_ok());
+
+        let rule = res.unwrap();
+        assert_eq!(rule.name, "A");
+        assert_eq!(
+            rule.definitions.0,
+            vec![
+                Definition(vec![
+                    Primary::NonTerminal("B"),
+                    Primary::Grouped(DefinitionList(vec![
+                        Definition(vec![Primary::Terminal("c")]),
+                        Definition(vec![Primary::NonTerminal("D"), Primary::NonTerminal("E")]),
+                        Definition(vec![Primary::Terminal("f")])
+                    ]))
+                ]),
+                Definition(vec![Primary::Terminal("g")])
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_group_unclosed() {
+        let source = r#" <A> ::= <B> ( "c" | "#;
+        let res = Parser::parse_rule(source);
+        assert!(res.is_err());
+
+        let source = r#" <A> ::= <B> [ "c" | "#;
+        let res = Parser::parse_rule(source);
+        assert!(res.is_err());
+
+        let source = r#" <A> ::= <B> { "c" | "#;
+        let res = Parser::parse_rule(source);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_parse_unexpected_close() {
+        let source = r#" <A> ::= ) "#;
+        let res = Parser::parse_rule(source);
+        assert!(res.is_err());
+        // println!("EEE {:?}", res);
+    }
+
+    #[test]
+    fn test_parse_unexpected_close_another() {
+        let source = r#" <A> ::= { [ "b" } "#;
+        let res = Parser::parse_rule(source);
+        assert!(res.is_err());
+        // println!("EEE {:?}", res);
+    }
+
+    #[test]
+    fn test_parse_deep_nesting() {
+        let source = r#" <A> ::= { "b" ([<C>] <D> | "e" {"e"} ) } "#;
+        let res = Parser::parse_rule(source);
+        assert!(res.is_ok());
+    }
+
+    /// # Syntax
+
+    #[test]
+    fn test_whole_syntax() {
+        let source = r#"
+            <A> ::= "d" [ <B> ]
+            <B> ::= "c" <A> | <D>
+
+            <D> ::= "e" { "f" <A> }
+        "#;
+        let res = Parser::parse(source);
+        assert!(res.is_ok());
+
+        let syntax = res.unwrap();
+        assert_eq!(
+            syntax.rules,
+            vec![
+                Rule::new(
+                    "A",
+                    DefinitionList(vec![Definition(vec![
+                        Primary::Terminal("d"),
+                        Primary::Optional(DefinitionList(vec![Definition(vec![
+                            Primary::NonTerminal("B")
+                        ])]))
+                    ])])
+                ),
+                Rule::new(
+                    "B",
+                    DefinitionList(vec![
+                        Definition(vec![Primary::Terminal("c"), Primary::NonTerminal("A")]),
+                        Definition(vec![Primary::NonTerminal("D")])
+                    ])
+                ),
+                Rule::new(
+                    "D",
+                    DefinitionList(vec![Definition(vec![
+                        Primary::Terminal("e"),
+                        Primary::Repeated(DefinitionList(vec![Definition(vec![
+                            Primary::Terminal("f"),
+                            Primary::NonTerminal("A"),
+                        ])]))
+                    ])])
+                )
+            ]
+        );
     }
 }
