@@ -11,11 +11,10 @@
 //!
 //! [Builder pattern]: https://en.wikipedia.org/wiki/Builder_pattern
 use regex::{Captures, Regex};
-use std::fmt::{self, Debug, Formatter};
 use std::cmp::Ordering;
-use std::rc::Rc;
+use std::fmt::{self, Debug, Formatter};
 use std::marker::PhantomData;
-
+use std::rc::Rc;
 
 pub struct Lexer<'a, T> {
     pairs: Rc<Vec<(Regex, Box<TokenFactory<'a, T>>)>>,
@@ -31,9 +30,9 @@ impl<'a, T> Clone for Lexer<'a, T> {
     }
 }
 
-
 impl<'a, T> Lexer<'a, T>
-    where T: Token<'a>
+where
+    T: Token<'a>,
 {
     /// Wrap lexer into `Tokens` stream without transfer of ownership.
     pub fn tokens(&self, source: &'a str) -> Tokens<'a, T> {
@@ -51,7 +50,11 @@ impl<'a, T> Lexer<'a, T>
     /// parse(stripped).is_err() => Some(Err(...))
     ///     where stripped = skip_whitespaces(source)
     /// ```
-    pub fn next(&self, source: &'a str, at: Location<Bytes>) -> Option<Result<LexerResult<T>, Error<'a, Bytes>>> {
+    pub fn next(
+        &self,
+        source: &'a str,
+        at: Location<Bytes>,
+    ) -> Option<Result<LexerResult<T>, Error<'a, Bytes>>> {
         assert!(source.as_bytes().len() >= at.absolute);
         let src = &source[at.absolute..];
 
@@ -61,7 +64,14 @@ impl<'a, T> Lexer<'a, T>
         let whitespace = &src[..whitespace_len];
 
         let at_token = at + whitespace;
-        let whitespace_span = if whitespace.is_empty() { None } else { Some(Span { start: at, end: at_token }) };
+        let whitespace_span = if whitespace.is_empty() {
+            None
+        } else {
+            Some(Span {
+                start: at,
+                end: at_token,
+            })
+        };
 
         if without_whitespace.is_empty() {
             None
@@ -118,11 +128,13 @@ pub struct LexerResult<T> {
 
 pub type MetaResult<'a, T> = Result<TokenMeta<T>, Error<'a, Bytes>>;
 
-pub trait MetaIter<'a, T>: Iterator<Item=MetaResult<'a, T>> {}
+pub trait MetaIter<'a, T>: Iterator<Item = MetaResult<'a, T>> {}
 
 impl<'a, T, I> MetaIter<'a, T> for I
-    where T: Token<'a>,
-          I: Iterator<Item=MetaResult<'a, T>> {}
+where
+    T: Token<'a>,
+    I: Iterator<Item = MetaResult<'a, T>>,
+{}
 
 /// Iterator over token stream, based on types `Lexer` and `Token`.
 ///
@@ -147,14 +159,18 @@ impl<'a, T: Token<'a>> Tokens<'a, T> {
             lexer,
             source,
             error: false,
-            location: Location { column: 1, ..Default::default() },
+            location: Location {
+                column: 1,
+                ..Default::default()
+            },
         }
     }
 }
 
-
 impl<'a, T> Iterator for Tokens<'a, T>
-    where T: Token<'a> {
+where
+    T: Token<'a>,
+{
     type Item = MetaResult<'a, T>;
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
@@ -162,9 +178,15 @@ impl<'a, T> Iterator for Tokens<'a, T>
             None
         } else {
             match self.lexer.next(self.source, self.location) {
-                Some(Ok(LexerResult { token, location, t, .. })) => {
+                Some(Ok(LexerResult {
+                    token, location, t, ..
+                })) => {
                     self.location = location;
-                    Some(Ok(TokenMeta { span: token, token: t, implicit: false }))
+                    Some(Ok(TokenMeta {
+                        span: token,
+                        token: t,
+                        implicit: false,
+                    }))
                 }
                 Some(Err(error)) => {
                     self.error = true;
@@ -180,20 +202,26 @@ impl<'a, T> Iterator for Tokens<'a, T>
 }
 
 pub trait TokensExt<'a, T>
-    where Self: MetaIter<'a, T> + Sized,
-          T: Token<'a> {
+where
+    Self: MetaIter<'a, T> + Sized,
+    T: Token<'a>,
+{
     /// Helper for tests.
     fn into_raw(self) -> TokensRaw<Self, T>;
 }
 
 impl<'a, T, I> TokensExt<'a, T> for I
-    where I: MetaIter<'a, T>,
-          T: Token<'a> {
+where
+    I: MetaIter<'a, T>,
+    T: Token<'a>,
+{
     fn into_raw(self) -> TokensRaw<Self, T> {
-        TokensRaw { inner: self, _marker: Default::default() }
+        TokensRaw {
+            inner: self,
+            _marker: Default::default(),
+        }
     }
 }
-
 
 pub struct TokensRaw<I, T> {
     inner: I,
@@ -201,7 +229,9 @@ pub struct TokensRaw<I, T> {
 }
 
 impl<'a, T, I> Iterator for TokensRaw<I, T>
-    where I: MetaIter<'a, T> {
+where
+    I: MetaIter<'a, T>,
+{
     type Item = T;
 
     fn next(&mut self) -> Option<T> {
@@ -212,22 +242,26 @@ impl<'a, T, I> Iterator for TokensRaw<I, T>
     }
 }
 
-
 pub struct LexerBuilder<'a, T> {
     pairs: Vec<(Regex, Box<TokenFactory<'a, T>>)>,
     skip_whitespaces: fn(&'a str) -> &'a str,
 }
 
 impl<'a, T> LexerBuilder<'a, T>
-    where T: Token<'a>
+where
+    T: Token<'a>,
 {
     pub fn new() -> Self {
-        LexerBuilder { pairs: Vec::new(), skip_whitespaces: |x| x }
+        LexerBuilder {
+            pairs: Vec::new(),
+            skip_whitespaces: |x| x,
+        }
     }
 
     /// Shortcut for `add_pair`.
     pub fn add<F>(self, regex: &str, factory: F) -> Self
-        where F: Fn(Captures<'a>) -> T + 'static
+    where
+        F: Fn(Captures<'a>) -> T + 'static,
     {
         assert!(regex.len() > 0);
 
@@ -254,20 +288,60 @@ impl<'a, T> LexerBuilder<'a, T>
     }
 
     pub fn build(self) -> Lexer<'a, T> {
-        Lexer { pairs: Rc::new(self.pairs), skip_whitespaces: self.skip_whitespaces }
+        Lexer {
+            pairs: Rc::new(self.pairs),
+            skip_whitespaces: self.skip_whitespaces,
+        }
     }
 }
 
-
 pub trait Token<'a>: Ord + Debug + Sized {
+    /// Pretty-print token. Fallbacks to `Debug` implementation.
     fn describe(&self) -> String {
         format!("{:?}", self)
     }
+
+    /// Generic content-agnostic descriptor of a token's kind.
+    ///
+    /// Lifetime is intentionally `'static`, so that set of all possible descriptors must be known
+    /// at compile-time. Each particular token kind must provide unique descriptor (within its
+    /// domain).
+    ///
+    /// # Examples
+    ///
+    /// Consider lexical domain:
+    ///
+    /// ```rust
+    /// enum MyToken {
+    ///     Ruler,
+    ///     Text(String),
+    /// }
+    /// ```
+    ///
+    /// Although `MyToken::Text` may vary greatly, we consider all `MyToken::Text(..)` instances to
+    /// be the same kind, namely `"text"`. Thus we end up with two descriptors: `"ruler"` and
+    /// `"text"`.
+    ///
+    /// We __may__ further match on `Text` content if it is needed:
+    ///
+    /// ```rust
+    /// # impl<'a> Token<'a> for MyToken {
+    /// fn descriptor(&self) -> &'static str {
+    ///     match *self {
+    ///         MyToken::Ruler => "ruler",
+    ///         MyToken::Text(text) => {
+    ///             if text.lines().count() <= 1 { "single" } else { "multi" }
+    ///         }
+    ///     }
+    /// }
+    /// # }
+    /// ```
+    fn descriptor(&self) -> &'static str;
 }
 
-
 pub trait TokenFactory<'a, T>
-    where T: Token<'a>
+where
+    T: Token<'a>,
 {
     fn token(&self, c: Captures<'a>) -> T;
 }
@@ -277,14 +351,14 @@ pub trait TokenFactory<'a, T>
 /// let factory_ident = |c| Tok::Ident(c.as_str());
 /// ```
 impl<'a, T, F> TokenFactory<'a, T> for F
-    where
-        T: Token<'a>,
-        F: Fn(Captures<'a>) -> T {
+where
+    T: Token<'a>,
+    F: Fn(Captures<'a>) -> T,
+{
     fn token(&self, c: Captures<'a>) -> T {
         self(c)
     }
 }
-
 
 pub trait Metrics: Copy + Clone + Debug + Default + Ord + PartialOrd + Eq + PartialEq {
     fn len(string: &str) -> usize;
@@ -343,7 +417,9 @@ impl Metrics for Bytes {
             location.was_newline = Self::is_newline(c);
         }
         location.absolute += s.bytes().count();
-        if was_none && location.absolute > 0 { location.absolute -= 1; }
+        if was_none && location.absolute > 0 {
+            location.absolute -= 1;
+        }
         location
     }
 }
@@ -371,8 +447,16 @@ impl Metrics for Chars {
     fn slice<'a>(span: &Span<Self>, string: &'a str) -> &'a str {
         assert!(span.end.absolute < Chars::len(string));
 
-        let skip: usize = string.chars().take(span.start.absolute).map(char::len_utf8).sum();
-        let take: usize = (&string[skip..]).chars().take(span.len()).map(char::len_utf8).sum();
+        let skip: usize = string
+            .chars()
+            .take(span.start.absolute)
+            .map(char::len_utf8)
+            .sum();
+        let take: usize = (&string[skip..])
+            .chars()
+            .take(span.len())
+            .map(char::len_utf8)
+            .sum();
 
         &string[skip..skip + take]
     }
@@ -389,11 +473,12 @@ impl Metrics for Chars {
             location.absolute += 1;
             location.was_newline = Chars::is_newline(c);
         }
-        if was_none && location.absolute > 0 { location.absolute -= 1; }
+        if was_none && location.absolute > 0 {
+            location.absolute -= 1;
+        }
         location
     }
 }
-
 
 #[derive(Copy, Clone, Debug)]
 pub struct Location<M: Metrics> {
@@ -422,7 +507,12 @@ impl<M: Metrics> Location<M> {
     pub fn new(line: usize, column: usize, absolute: usize) -> Self {
         assert!(line >= 1);
 
-        Self { line, column, absolute, ..Default::default() }
+        Self {
+            line,
+            column,
+            absolute,
+            ..Default::default()
+        }
     }
 
     pub fn is_none(&self) -> bool {
@@ -497,7 +587,6 @@ impl<M: Metrics, S: AsRef<str>> ::std::ops::AddAssign<S> for Location<M> {
         *self = M::location_add(*self, rhs.as_ref());
     }
 }
-
 
 /// Span of substring in string.
 ///
@@ -604,19 +693,31 @@ impl<M: Metrics> Span<M> {
     }
 
     /// Shortcut to `self.start.line`.
-    pub fn start_line(&self) -> usize { self.start.line }
+    pub fn start_line(&self) -> usize {
+        self.start.line
+    }
 
     /// Shortcut to `self.end.line`.
-    pub fn end_line(&self) -> usize { self.end.line }
+    pub fn end_line(&self) -> usize {
+        self.end.line
+    }
 
     /// Count of intermediate lines spanned by `self`.
     pub fn intermediate_lines(&self) -> usize {
-        if self.is_multiline() { self.end.line - self.start.line - 1 } else { 0 }
+        if self.is_multiline() {
+            self.end.line - self.start.line - 1
+        } else {
+            0
+        }
     }
 
     /// Count of total lines spanned by `self`.
     pub fn total_lines(&self) -> usize {
-        if self.is_multiline() { self.end.line - self.start.line + 1 } else { 1 }
+        if self.is_multiline() {
+            self.end.line - self.start.line + 1
+        } else {
+            1
+        }
     }
 
     /// Check if two tokens are both on the same line.
@@ -633,20 +734,37 @@ pub struct TokenMeta<T> {
     pub implicit: bool,
 }
 
-impl<T> Clone for TokenMeta<T> where T: Clone {
+impl<T> Clone for TokenMeta<T>
+where
+    T: Clone,
+{
     fn clone(&self) -> Self {
-        Self { span: self.span, token: self.token.clone(), implicit: self.implicit }
+        Self {
+            span: self.span,
+            token: self.token.clone(),
+            implicit: self.implicit,
+        }
     }
 }
 
-impl<T> Debug for TokenMeta<T> where T: Debug {
+impl<T> Debug for TokenMeta<T>
+where
+    T: Debug,
+{
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        write!(f, "TokenMeta {{ span: {:?}, token: {:?}, implicit: {} }}", self.span, self.token, self.implicit)
+        write!(
+            f,
+            "TokenMeta {{ span: {:?}, token: {:?}, implicit: {} }}",
+            self.span, self.token, self.implicit
+        )
     }
 }
 
 #[derive(Debug)]
-pub struct Error<'a, M> where M: Metrics {
+pub struct Error<'a, M>
+where
+    M: Metrics,
+{
     pub filename: &'a str,
     pub span: Span<M>,
     pub source: &'a str,
@@ -654,16 +772,21 @@ pub struct Error<'a, M> where M: Metrics {
     pub description: Option<String>,
 }
 
-impl<'a, M> fmt::Display for Error<'a, M> where M: Metrics {
+impl<'a, M> fmt::Display for Error<'a, M>
+where
+    M: Metrics,
+{
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        writeln!(f, "Error at {}:{}:{}",
-                 self.filename,
-                 self.span.start.line,
-                 self.span.start.column,
+        writeln!(
+            f,
+            "Error at {}:{}:{}",
+            self.filename, self.span.start.line, self.span.start.column,
         )?;
         for (line, (string, span)) in self.span.lines(self.source).into_iter().enumerate() {
             let line = line + self.span.start.line;
-            let before = if span.start.absolute == 0 { 0 } else {
+            let before = if span.start.absolute == 0 {
+                0
+            } else {
                 Span::<M>::from(string, 0, span.start.absolute - 1)
                     .slice(string)
                     .chars()
@@ -689,7 +812,10 @@ pub fn token<'a, T: Token<'a>>(x: Option<Result<TokenMeta<T>, Error<'a, Bytes>>>
 }
 
 #[cfg(test)]
-pub fn next<'a, T: Token<'a>>(lexer: &Lexer<'a, T>, source: &'a str) -> Option<Result<TokenMeta<T>, Error<'a, Bytes>>> {
+pub fn next<'a, T: Token<'a>>(
+    lexer: &Lexer<'a, T>,
+    source: &'a str,
+) -> Option<Result<TokenMeta<T>, Error<'a, Bytes>>> {
     lexer.tokens(source).next()
 }
 
@@ -699,8 +825,20 @@ mod test {
 
     const SOURCE: &str = "line one\nline two";
     const ONE_LINE_BYTES_SPAN: Span<Bytes> = Span {
-        start: Location { line: 1, column: 6, absolute: 5, was_newline: false, metrics: Bytes },
-        end: Location { line: 2, column: 4, absolute: 12, was_newline: false, metrics: Bytes },
+        start: Location {
+            line: 1,
+            column: 6,
+            absolute: 5,
+            was_newline: false,
+            metrics: Bytes,
+        },
+        end: Location {
+            line: 2,
+            column: 4,
+            absolute: 12,
+            was_newline: false,
+            metrics: Bytes,
+        },
     };
 
     #[test]
@@ -812,7 +950,6 @@ mod test {
         assert_eq!(1, span.len());
     }
 
-
     #[test]
     fn test_span_char() {
         // span over "one\nline" substring
@@ -848,13 +985,12 @@ mod test {
         };
     }
 
-    const NUMBERS: &str = "\
-            one\n\
-            two word\n\
-            tree\n\
-            four\n\
-            five to wolf\n\
-            six";
+    const NUMBERS: &str = "one\n\
+                           two word\n\
+                           tree\n\
+                           four\n\
+                           five to wolf\n\
+                           six";
 
     const NUMBERS_BYTES_SPAN: Span<Bytes> = Span {
         start: Location {
@@ -914,7 +1050,7 @@ Custom error message.
 
     #[test]
     fn test_raw_iter() {
-        use ::lang::brainfuck::{BfToken, make_lexer};
+        use lang::brainfuck::{make_lexer, BfToken};
 
         let lexer = make_lexer();
         // type check
