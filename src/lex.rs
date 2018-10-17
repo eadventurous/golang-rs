@@ -93,7 +93,6 @@ where
                         filename: "",
                         span: Span { start: at, end: at },
                         source,
-                        rest: without_whitespace,
                         description: Some("No token could be matched".to_owned()),
                     })
                     // type: (&str, T)
@@ -1155,7 +1154,6 @@ mod test {
             filename: "<stdin>",
             span: NUMBERS_BYTES_SPAN,
             source: NUMBERS,
-            rest: "",
             description: Some("Custom error message.".to_owned()),
         };
 
