@@ -374,6 +374,12 @@ pub trait Metrics: Copy + Clone + Debug + Default + Ord + PartialOrd + Eq + Part
         // Also `absolute` should be -1 for this case, but it is usize, so instead we will fix it later.
         Location::default() + &string[..absolute + 1]
     }
+
+    fn span_over(string: &str) -> Span<Self> {
+        let start = Location::from(string, 0);
+        let end = Location::from(string, Self::len(string) - 1);
+        Span::new(start, end)
+    }
 }
 
 #[derive(Copy, Clone, Debug, Default, Ord, PartialOrd, Eq, PartialEq)]
@@ -600,6 +606,22 @@ pub struct Span<M: Metrics> {
 }
 
 impl<M: Metrics> Span<M> {
+    /// Construct `Span` from its both locations.
+    pub fn new(start: Location<M>, end: Location<M>) -> Self {
+        Self { start, end }
+    }
+
+    /// Span all over the whole string.
+    ///
+    /// But it would fail if string is empty.
+    pub fn over(string: &str) -> Option<Self> {
+        if string.is_empty() {
+            None
+        } else {
+            Some(M::span_over(string))
+        }
+    }
+
     /// Make span from absolute positions (with both ends inclusive).
     pub fn from(string: &str, start: usize, end: usize) -> Self {
         Self {
