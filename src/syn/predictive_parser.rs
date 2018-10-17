@@ -264,21 +264,22 @@ mod test {
         "#;
         let grammar = Grammar::from_str(source).unwrap();
         println!("{:#?}", grammar);
-        let lexer = brainfuck::make_lexer();
         let input = ",[.-[-->++<]>+]";
-        let tokens = lexer.into_tokens(input);
-        let result = parse_tokens(&grammar, NonTerminal("Code"), tokens);
-        assert!(result.is_ok());
+        let tokens = brainfuck::make_lexer().into_tokens(input);
+        let tree = parse_tokens(&grammar, NonTerminal("Code"), tokens).unwrap();
 
-        let tree = &result.unwrap();
-        let code_children_ids = tree.get(tree.root_node_id().unwrap()).unwrap().children();
-        let code_children: Vec<&String> = code_children_ids
-            .iter()
-            .map(|n_id| tree.get(n_id).unwrap().data())
+        let code_children: Vec<_> = tree
+            .children(tree.root_node_id().unwrap())
+            .unwrap()
+            .map(Node::data)
             .collect();
         assert_eq!(code_children, vec!["Command", "Code"]);
-        let command_children_ids = tree.get(&code_children_ids[0]).unwrap().children();
-        assert_eq!(tree.get(&command_children_ids[0]).unwrap().data(), "Input");
+
+        let mut code_children_ids = tree.children_ids(tree.root_node_id().unwrap()).unwrap();
+        let mut command_children_ids = tree.children_ids(&code_children_ids.next().unwrap()).unwrap();
+        let first_command_node = tree.get(command_children_ids.next().unwrap()).unwrap();
+
+        assert_eq!("Input", first_command_node.data());
 
         // println!("{}", TreeFmt(&tree));
     }
