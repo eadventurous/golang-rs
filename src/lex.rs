@@ -760,16 +760,126 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Error<'a, M>
 where
     M: Metrics,
 {
     pub filename: &'a str,
-    pub span: Span<M>,
     pub source: &'a str,
-    pub rest: &'a str,
+    pub span: Span<M>,
     pub description: Option<String>,
+}
+
+/// Alias to `Error<Bytes>`
+pub type ErrorBytes<'a> = Error<'a, Bytes>;
+
+/// Alias to `Error<Chars>`
+pub type ErrorChars<'a> = Error<'a, Chars>;
+
+#[derive(Debug)]
+pub struct SimpleError<M>
+where
+    M: Metrics,
+{
+    pub span: Span<M>,
+    pub description: Option<String>,
+}
+
+/// Alias to `SimpleError<Bytes>`
+pub type SimpleErrorBytes = SimpleError<Bytes>;
+
+/// Alias to `SimpleError<Chars>`
+pub type SimpleErrorChars = SimpleError<Chars>;
+
+impl<'a, M> Error<'a, M>
+where
+    M: Metrics,
+{
+    pub fn new(
+        filename: &'a str,
+        span: Span<M>,
+        source: &'a str,
+        description: Option<String>,
+    ) -> Self {
+        Error {
+            filename,
+            source,
+            span,
+            description,
+        }
+    }
+
+    pub fn filename(mut self, filename: &'a str) -> Self {
+        self.filename = filename;
+        self
+    }
+
+    pub fn source(mut self, source: &'a str) -> Self {
+        self.source = source;
+        self
+    }
+
+    pub fn span(mut self, span: Span<M>) -> Self {
+        self.span = span;
+        self
+    }
+
+    pub fn description<S>(mut self, description: Option<String>) -> Self
+    where
+        S: Into<String>,
+    {
+        self.description = description.map(Into::into);
+        self
+    }
+}
+
+impl<'a, M> From<SimpleError<M>> for Error<'a, M>
+where
+    M: Metrics,
+{
+    fn from(e: SimpleError<M>) -> Self {
+        Self::new("<none>", e.span, "", e.description)
+    }
+}
+
+impl<'a, M> From<Error<'a, M>> for SimpleError<M>
+where
+    M: Metrics,
+{
+    fn from(e: Error<'a, M>) -> Self {
+        SimpleError {
+            span: e.span,
+            description: e.description,
+        }
+    }
+}
+
+impl<'a, M> SimpleError<M>
+where
+    M: Metrics,
+{
+    pub fn span(mut self, span: Span<M>) -> Self {
+        self.span = span;
+        self
+    }
+
+    pub fn description<S>(mut self, description: Option<S>) -> Self
+    where
+        S: Into<String>,
+    {
+        self.description = description.map(Into::into);
+        self
+    }
+}
+
+impl<'a, T> From<TokenMeta<T>> for SimpleErrorBytes {
+    fn from(meta: TokenMeta<T>) -> Self {
+        SimpleError {
+            span: meta.span,
+            description: None,
+        }
+    }
 }
 
 impl<'a, M> fmt::Display for Error<'a, M>
