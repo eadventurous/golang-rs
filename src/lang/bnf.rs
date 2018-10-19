@@ -39,11 +39,10 @@ fn whitespace_filter(source: &str) -> &str {
 }
 
 pub fn make_lexer<'a>() -> Lexer<'a, BnfToken<'a>> {
-    let constant = |x| move |_| x;
     LexerBuilder::new()
         .skip_whitespaces(whitespace_filter)
-        .add(r"::=", constant(BnfToken::Operator(BnfOperator::Def)))
-        .add(r"\|", constant(BnfToken::Operator(BnfOperator::Alt)))
+        .add(r"::=", constant!(BnfToken::Operator(BnfOperator::Def)))
+        .add(r"\|", constant!(BnfToken::Operator(BnfOperator::Alt)))
         .add(r"<(.+?)>", |c| {
             BnfToken::NonTerminal(c.get(1).unwrap().as_str())
         }).add("\"(.*?)\"", |c| {

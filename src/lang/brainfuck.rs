@@ -32,16 +32,15 @@ impl<'a> Token<'a> for BfToken<'a> {
 }
 
 pub fn make_lexer<'a>() -> Lexer<'a, BfToken<'a>> {
-    let constant = |x| move |_| x;
     LexerBuilder::new()
-        .add(r"<", constant(BfToken::Left))
-        .add(r">", constant(BfToken::Right))
-        .add(r"\[", constant(BfToken::Cond))
-        .add(r"]", constant(BfToken::Loop))
-        .add(r",", constant(BfToken::Input))
-        .add(r"\.", constant(BfToken::Output))
-        .add(r"\+", constant(BfToken::Inc))
-        .add(r"-", constant(BfToken::Dec))
+        .add(r"<", constant!(BfToken::Left))
+        .add(r">", constant!(BfToken::Right))
+        .add(r"\[", constant!(BfToken::Cond))
+        .add(r"]", constant!(BfToken::Loop))
+        .add(r",", constant!(BfToken::Input))
+        .add(r"\.", constant!(BfToken::Output))
+        .add(r"\+", constant!(BfToken::Inc))
+        .add(r"-", constant!(BfToken::Dec))
         .add(r"[^<>\[\],.+\-]+", |c| {
             BfToken::Comment(c.get(0).unwrap().as_str())
         }).build()
