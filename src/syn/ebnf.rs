@@ -32,7 +32,7 @@ pub enum Primary {
     Grouped(DefinitionList),
     Terminal(String),
     NonTerminal(String),
-    Empty,
+    Epsilon,
 }
 
 /// To be a little bit more consistent with ISO standard on EBNF.
@@ -127,7 +127,7 @@ mod impls {
                         // X = eps | X E
                         DefinitionList(vec![
                             // eps
-                            Definition(vec![Primary::Empty]),
+                            Definition(vec![Primary::Epsilon]),
                             // X E
                             Definition({
                                 if E.len() == 1 {
@@ -206,7 +206,7 @@ mod impls {
                         let X_index = self.add_rule();
 
                         // prepend eps | E
-                        E.0.insert(0, Definition(vec![Primary::Empty]));
+                        E.0.insert(0, Definition(vec![Primary::Epsilon]));
                         // set `X = eps | E`
                         self.rules[X_index].definitions = E;
 
@@ -371,7 +371,7 @@ mod impls {
             } else if self[0].len() == 0 {
                 // one empty definition
                 true
-            } else if self[0][0] == Primary::Empty {
+            } else if self[0][0] == Primary::Epsilon {
                 // one definition with epsilon
                 true
             } else {
@@ -449,7 +449,7 @@ mod impls {
                 Primary::NonTerminal(ref t) => {
                     tokens.push(NonTerminal(&t));
                 }
-                Primary::Empty => {}
+                Primary::Epsilon => {}
             }
             tokens
         }
@@ -553,7 +553,7 @@ mod impls {
                 match meta.token.clone() {
                     Terminal(t) => {
                         let terminal = if t == "" {
-                            Primary::Empty
+                            Primary::Epsilon
                         } else {
                             Primary::Terminal(t.to_owned())
                         };
@@ -922,7 +922,7 @@ mod tests {
         let rule_X0 = Rule::new(
             &X0,
             DefinitionList(vec![
-                Definition(vec![Primary::Empty]),
+                Definition(vec![Primary::Epsilon]),
                 Definition(vec![Primary::Terminal("E".into())]),
                 Definition(vec![Primary::Terminal("F".into())]),
             ]),
@@ -950,7 +950,7 @@ mod tests {
                     &name,
                     DefinitionList(vec![
                         // ""
-                        Definition(vec![Primary::Empty]),
+                        Definition(vec![Primary::Epsilon]),
                         // <X> "E"
                         Definition(vec![X.clone(), Primary::Terminal("E".into())])
                     ])
@@ -978,7 +978,7 @@ mod tests {
                     &name,
                     DefinitionList(vec![
                         // ""
-                        Definition(vec![Primary::Empty]),
+                        Definition(vec![Primary::Epsilon]),
                         // "E" <X>
                         Definition(vec![Primary::Terminal("E".into()), X.clone()])
                     ])
@@ -1012,7 +1012,7 @@ mod tests {
         let rule_X0 = Rule::new(
             &X0,
             DefinitionList(vec![
-                Definition(vec![Primary::Empty]),
+                Definition(vec![Primary::Epsilon]),
                 Definition(vec![
                     Primary::NonTerminal(X0.clone()),
                     Primary::NonTerminal(X1.clone()),
