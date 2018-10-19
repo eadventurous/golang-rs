@@ -151,50 +151,51 @@ mod impls {
                     // Convert `X = A [ E ] B` to `X = A E B | A B`.
                     // Note that definitions list of X may contain other alternatives on both sides of
                     // definition containing optional term. For example:
-                    // X = I | A [ E ] B | ( J | K ) | { L }
-                    // X = I | A E B | A B | ( J K ) | { L }
+                    // X = I | A [ E ]  B  | ( J | K ) | { L }
+                    // X = I | A E B | A B | ( J | K ) | { L }
                     // In such case, expansion must take care of preserving other context.
-
-                    let rule = &mut self.rules[x];
-
-                    // [ E ]
-                    let E_len = rule.definitions[y][z].inner().unwrap().len();
 
                     // Expand `A [ E ] B` to `A E B`.
                     // Consider cases where E introduces new "alternatives scope" (e.g. E ::= A | B)
                     // as well as where E is defined as single `Definition`.
-                    match E_len {
-                        // empty optional: `[ ]`
-                        0 => {
-                            // just remove it
-                            rule.definitions[y].remove(z);
-                        }
+
+                    // this is not actually E, but surrounding Primary::Optional [ E ]
+                    let E_outer = self.rules[x].definitions[y].remove(z);
+                    let mut E = E_outer.into_inner().unwrap();
+
+                    if E.is_empty() {
+                        // just remove it.
+                        // nothing more to do.
+                    } else if E.len() == 1 {
                         // insert alternative with and without E back to the definitions
-                        _ => {
-                            // without E
-                            let E: Primary = rule.definitions[y].remove(z);
 
-                            // with expanded E
-                            match E_len {
-                                // optional of single list: `[ E ]` or `[ A B { C } ]`
-                                1 => {
-                                    // expand into current alternate definition
-                                    let mut definition = rule.definitions[y].clone();
+                        // without E
+                        // - already done by removing
 
-                                    let inners =
-                                        E.into_inner().unwrap().0.into_iter().nth(0).unwrap();
-                                    definition.splice(z..z, inners.0);
+                        // with expanded E
+                        // - optional of single definition (i.e. not a list of alternatives):
+                        //   `[ E ]` or `[ A B { C } ]`
+                        let inners = E.0.into_iter().nth(0).unwrap();
 
-                                    rule.definitions.insert(y, definition);
-                                }
-                                // multiple alternatives: `[ A | B ]`
-                                _ => {
-                                    // insert into alternatives list
-                                    let inners = E.into_inner().unwrap();
-                                    rule.definitions.splice(y..y, inners.0);
-                                }
-                            }
-                        }
+                        // inflate current alternate definition
+                        let mut definition = self.rules[x].definitions[y].clone();
+                        definition.splice(z..z, inners.0);
+                        self.rules[x].definitions.insert(y, definition);
+                    } else {
+                        // multiple definitions (i.e. a list of alternatives):
+                        // `[ A | B ]`
+
+                        // Convert to fresh non-terminal `X` and add `X = eps | E`.
+                        let X_index = self.add_rule();
+
+                        // prepend eps | E
+                        E.0.insert(0, Definition(vec![Primary::Empty]));
+                        // set `X = eps | E`
+                        self.rules[X_index].definitions = E;
+
+                        // replace [E] with X
+                        let X = self.rules[X_index].non_terminal();
+                        self.rules[x].definitions[y].insert(z, X.clone());
                     }
                 }
                 _ => unreachable!(),
@@ -206,19 +207,20 @@ mod impls {
             #![allow(non_snake_case)]
             match self.extract((x, y, z)).nesting() {
                 Some(Nesting::Grouped) => {
-                    let X_index = self.add_rule();
+                    let E_outer = self.rules[x].definitions[y].remove(z);
+                    let mut E = E_outer.into_inner().unwrap();
 
-                    let mut X = self.rules[X_index].non_terminal();
+                    if E.is_empty() {
+                        // for empty ( ) just remove it
+                        // nothing more to do
+                    } else {
+                        let X_index = self.add_rule();
+                        self.rules[X_index].definitions = E;
 
-                    let list = {
-                        let nesting = self.extract_mut((x, y, z));
-                        ::std::mem::swap(&mut X, nesting);
-                        let nesting = X;
-
-                        nesting.into_inner().unwrap()
-                    };
-
-                    self.rules[X_index].definitions = list;
+                        // insert X in place of removed ( E )
+                        let mut X = self.rules[X_index].non_terminal();
+                        self.rules[x].definitions[y].insert(z, X);
+                    }
                 }
                 _ => unreachable!(),
             }
@@ -342,6 +344,22 @@ mod impls {
                 }
             }
             self.0.iter().enumerate().filter_map(f).next()
+        }
+
+        /// Using `is_empty` is slightly smarter that simple `len() == 0` test.
+        pub fn is_empty(&self) -> bool {
+            if self.len() == 0 {
+                // no definitions at all
+                true
+            } else if self[0].len() == 0 {
+                // one empty definition
+                true
+            } else if self[0][0] == Primary::Empty {
+                // one definition with epsilon
+                true
+            } else {
+                false
+            }
         }
     }
 
