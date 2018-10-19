@@ -31,9 +31,16 @@ fn main() {
     let mut source = String::new();
     stdin.read_to_string(&mut source).ok();
 
-    let lexer = lang::golang::make_lexer();
-    let tokens = lexer.into_tokens(&source);
-    let tokens = lang::golang::drop_comments(tokens);
-    let tokens = lang::golang::necessary_semicolon(tokens);
-    print_tokens(tokens);
+    let syntax = syn::ebnf::Parser::parse(&source, "<stdin>");
+    eprintln!("syntax = {:#?}", syntax);
+
+    match syntax {
+        Ok(mut syntax) => {
+            syntax.convert_to_bnf();
+            eprintln!("{}", syntax);
+        }
+        Err(error) => {
+            eprintln!("{}", error);
+        }
+    }
 }

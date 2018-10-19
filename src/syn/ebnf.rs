@@ -59,7 +59,7 @@ pub struct Parser<'a> {
 
 mod impls {
     use super::*;
-    use lex::{MetaResult, SimpleErrorBytes, Span, Token, TokenMeta};
+    use lex::{ErrorBytes, MetaResult, SimpleErrorBytes, Span, Token, TokenMeta};
     use std::fmt::{self, Display, Formatter};
     use std::ops::{Deref, DerefMut};
     use syn::bnf::non_empties;
@@ -246,6 +246,16 @@ mod impls {
                 }
             }
             self.rules.iter().enumerate().filter_map(f).next()
+        }
+    }
+
+    impl Display for Syntax {
+        fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+            writeln!(f, "(E)BNF Syntax rules:")?;
+            for rule in self.rules.iter() {
+                writeln!(f, "{}", rule)?;
+            }
+            Ok(())
         }
     }
 
@@ -456,11 +466,13 @@ mod impls {
             }
         }
 
-        pub fn parse(source: &'a str) -> Result<Syntax, SimpleErrorBytes> {
+        pub fn parse(source: &'a str, filename: &'a str) -> Result<Syntax, ErrorBytes<'a>> {
             let mut syntax = Syntax::new();
 
             for line in non_empties(source.lines()) {
-                syntax.rules.push(Self::parse_rule(line)?);
+                let rule = Self::parse_rule(line)
+                    .map_err(|e| ErrorBytes::from(e).source(source).filename(filename))?;
+                syntax.rules.push(rule);
             }
 
             Ok(syntax)
@@ -752,7 +764,7 @@ mod tests {
 
             <D> ::= "e" { "f" <A> }
         "#;
-        let res = Parser::parse(source);
+        let res = Parser::parse(source, FILENAME);
         assert!(res.is_ok());
 
         let syntax = res.unwrap();
