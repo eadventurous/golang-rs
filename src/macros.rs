@@ -1,6 +1,7 @@
 #![macro_use]
 
 /// Construct HashSet literal as `hash_set!{a, b, c}`.
+#[macro_export]
 macro_rules! hash_set {
     ($($k: expr),*) => {{
         let mut set = ::std::collections::hash_set::HashSet::new();
@@ -13,6 +14,7 @@ macro_rules! hash_set {
 }
 
 /// Construct HashMap literal as `hash_map!{k1: v1, k2: v2}`.
+#[macro_export]
 macro_rules! hash_map {
     ($($k: expr, $v: expr),*) => {{
         let mut map = ::std::collections::hash_map::HashMap::new();
@@ -31,6 +33,7 @@ macro_rules! hash_map {
 ///
 /// This requires `x` to be `Clone`able for repeated usage (e.g. to
 /// cast into `Fn` trait instead of `FnOnce`)
+#[macro_export]
 macro_rules! constant {
     ($x:expr) => {
         move |_| $x
@@ -91,6 +94,7 @@ macro_rules! constant {
 /// ```
 ///
 /// [`id_tree`]: https://crates.io/crates/id_tree
+#[macro_export]
 macro_rules! tree {
     () => (
         ::id_tree::TreeBuilder::new().build()
