@@ -36,7 +36,7 @@ fn main() {
 
     match syntax {
         Ok(mut syntax) => {
-            syntax.convert_to_bnf();
+            syntax.ebnf_to_bnf();
             eprintln!("{}", syntax);
         }
         Err(error) => {
