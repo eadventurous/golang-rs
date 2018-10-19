@@ -35,9 +35,14 @@ fn main() {
     eprintln!("syntax = {:#?}", syntax);
 
     match syntax {
-        Ok(mut syntax) => {
-            syntax.ebnf_to_bnf();
-            eprintln!("{}", syntax);
+        Ok(syntax) => {
+            let mut left = syntax.clone();
+            left.ebnf_to_bnf(syn::ebnf::Recursion::Left);
+            eprintln!("Left {}", left);
+
+            let mut right = syntax.clone();
+            right.ebnf_to_bnf(syn::ebnf::Recursion::Right);
+            eprintln!("Right {}", right);
         }
         Err(error) => {
             eprintln!("{}", error);
