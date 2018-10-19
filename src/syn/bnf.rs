@@ -95,12 +95,19 @@ pub struct GrammarRule<'a, 'b> {
 }
 
 impl<'a, 'b> GrammarRule<'a, 'b> {
+    pub fn new(name: &'a str) -> Self {
+        Self {
+            name,
+            expression: vec![],
+        }
+    }
+
     /// ```bnf
     /// <Rule> ::= <Name> "::=" <Productions>
     /// <Name> ::= <Terminal>
     /// ...
     /// ```
-    fn from_str(s: &str) -> Result<GrammarRule, &'static str> {
+    pub fn from_str(s: &str) -> Result<GrammarRule, &'static str> {
         let lexer = make_lexer();
         let mut tokens = lexer.into_tokens(s).into_raw();
 
@@ -144,6 +151,12 @@ pub fn non_empties<'a, S: AsRef<str>>(iter: impl Iterator<Item = S>) -> impl Ite
 }
 
 impl<'a, 'b> Grammar<'a, 'b> {
+
+    pub fn new() -> Self {
+        Self {
+            rules: Vec::new(),
+        }
+    }
     pub fn from_str(s: &str) -> Result<Grammar, &'static str> {
         let mut rules = vec![];
 

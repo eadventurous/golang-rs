@@ -67,6 +67,7 @@ pub struct Parser<'a> {
 }
 
 mod impls {
+    use super::super::bnf;
     use super::*;
     use lex::{ErrorBytes, MetaResult, SimpleErrorBytes, Span, Token, TokenMeta};
     use std::fmt::{self, Display, Formatter};
@@ -103,6 +104,16 @@ mod impls {
                     _ => unreachable!(),
                 }
             }
+        }
+
+        pub fn into_bnf(&self) -> Result<bnf::Grammar, ()> {
+            let mut bnf = bnf::Grammar::new();
+
+            for rule in &self.rules {
+                bnf.rules.push(rule.into_bnf()?);
+            }
+
+            Ok(bnf)
         }
 
         /// 1. Convert every repetition `{ E }` to a fresh non-terminal `X` and add `X = eps | X ( E )`.
@@ -318,6 +329,16 @@ mod impls {
 
             tokens
         }
+
+        pub fn into_bnf(&self) -> Result<bnf::GrammarRule, ()> {
+            let mut bnf = bnf::GrammarRule::new(&self.name);
+
+            for definition in &self.definitions.0 {
+                bnf.expression.push(definition.into_bnf()?);
+            }
+
+            Ok(bnf)
+        }
     }
 
     impl Display for Rule {
@@ -408,6 +429,16 @@ mod impls {
         fn find_nested(&self) -> Option<usize> {
             self.0.iter().position(Primary::is_nested)
         }
+
+        pub fn into_bnf(&self) -> Result<Vec<bnf::GrammarSymbol>, ()> {
+            let mut symbols = vec![];
+
+            for primary in &self.0 {
+                symbols.push(primary.into_bnf()?);
+            }
+
+            Ok(symbols)
+        }
     }
 
     impl Deref for Definition {
@@ -496,6 +527,15 @@ mod impls {
                 | Primary::Repeated(ref list)
                 | Primary::Grouped(ref list) => Some(list),
                 _ => None,
+            }
+        }
+
+        pub fn into_bnf(&self) -> Result<bnf::GrammarSymbol, ()> {
+            match self {
+                Primary::Optional(..) | Primary::Repeated(..) | Primary::Grouped(..) => Err(()),
+                Primary::Terminal(ref t) => Ok(bnf::Terminal(t)),
+                Primary::NonTerminal(ref t) => Ok(bnf::NonTerminal(t)),
+                Primary::Epsilon => Ok(bnf::Terminal("")),
             }
         }
     }

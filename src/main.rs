@@ -27,6 +27,8 @@ pub fn print_tokens<'a, T: Token<'a>, I: MetaIter<'a, T>>(tokens: I) {
 }
 
 fn main() {
+    let now_what = "syntax";
+    println!("Reading {} from stdin...", now_what);
     let mut stdin = std::io::stdin();
     let mut source = String::new();
     stdin.read_to_string(&mut source).ok();
@@ -38,7 +40,9 @@ fn main() {
         Ok(syntax) => {
             let mut left = syntax.clone();
             left.ebnf_to_bnf(syn::ebnf::Recursion::Left);
+            let bnf = left.into_bnf().unwrap();
             eprintln!("Left {}", left);
+            eprintln!("Left BNF {:#?}", bnf);
 
             let mut right = syntax.clone();
             right.ebnf_to_bnf(syn::ebnf::Recursion::Right);
