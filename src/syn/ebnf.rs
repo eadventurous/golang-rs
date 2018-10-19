@@ -172,12 +172,18 @@ mod impls {
                             match E_len {
                                 // optional of single list: `[ E ]` or `[ A B { C } ]`
                                 1 => {
-                                    let inner =
+                                    // expand into current alternate definition
+                                    let mut definition = rule.definitions[y].clone();
+
+                                    let inners =
                                         E.into_inner().unwrap().0.into_iter().nth(0).unwrap();
-                                    rule.definitions.insert(y, inner);
+                                    definition.splice(z..z, inners.0);
+
+                                    rule.definitions.insert(y, definition);
                                 }
                                 // multiple alternatives: `[ A | B ]`
                                 _ => {
+                                    // insert into alternatives list
                                     let inners = E.into_inner().unwrap();
                                     rule.definitions.splice(y..y, inners.0);
                                 }
