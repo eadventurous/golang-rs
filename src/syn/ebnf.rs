@@ -82,13 +82,19 @@ mod impls {
             }
         }
 
+        /// 2-in-1: `expand_ebnf` and `into_bnf` working together.
+        pub fn ebnf_to_bnf(&mut self, recursion: Recursion) -> bnf::Grammar {
+            self.expand_ebnf(recursion);
+            self.into_bnf().unwrap()
+        }
+
         /// EBNF to BNF transformation.
         ///
         /// This process eliminates each nesting term according to three rules: see `rule_1`,
         /// `rule_2` and `rule_3` for more information. Those rules are not means to be called
         /// directly, but rather made public for educational purposes. Use `find_nesting` function
         /// to fetch parameters for them.
-        pub fn ebnf_to_bnf(&mut self, recursion: Recursion) {
+        pub fn expand_ebnf(&mut self, recursion: Recursion) {
             while let Some(xyz) = self.find_nested() {
                 let ref nesting = self.extract(xyz).nesting();
                 match nesting {
@@ -106,6 +112,10 @@ mod impls {
             }
         }
 
+        /// Downgrade EBNF syntax to BNF.
+        ///
+        /// This does not try to rewrite existing rules to eliminate nesting.
+        /// To do that, `expand_ebnf` first.
         pub fn into_bnf(&self) -> Result<bnf::Grammar, ()> {
             let mut bnf = bnf::Grammar::new();
 
@@ -901,7 +911,7 @@ mod tests {
 
     fn bnf(source: &str, recursion: Recursion) -> Syntax {
         let mut syntax = Parser::parse(source, FILENAME).unwrap();
-        syntax.ebnf_to_bnf(recursion);
+        syntax.expand_ebnf(recursion);
         syntax
     }
 

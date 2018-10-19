@@ -27,29 +27,47 @@ pub fn print_tokens<'a, T: Token<'a>, I: MetaIter<'a, T>>(tokens: I) {
 }
 
 fn main() {
-    let now_what = "syntax";
-    println!("Reading {} from stdin...", now_what);
-    let mut stdin = std::io::stdin();
-    let mut source = String::new();
-    stdin.read_to_string(&mut source).ok();
+    fn read(now_what: &str) -> String {
+        println!("Reading {} from stdin...", now_what);
+        let mut stdin = std::io::stdin();
+        let mut string = String::new();
+        stdin.read_to_string(&mut string).ok();
+        string
+    }
 
+    let source = read("syntax");
     let syntax = syn::ebnf::Parser::parse(&source, "<stdin>");
-    eprintln!("syntax = {:#?}", syntax);
+    println!("syntax = {:#?}", syntax);
 
     match syntax {
-        Ok(syntax) => {
+        Ok(ref syntax) => {
             let mut left = syntax.clone();
-            left.ebnf_to_bnf(syn::ebnf::Recursion::Left);
+            left.expand_ebnf(syn::ebnf::Recursion::Left);
             let bnf = left.into_bnf().unwrap();
-            eprintln!("Left {}", left);
-            eprintln!("Left BNF {:#?}", bnf);
+            println!("Left {}", left);
+            println!("Left BNF {:#?}", bnf);
 
             let mut right = syntax.clone();
-            right.ebnf_to_bnf(syn::ebnf::Recursion::Right);
-            eprintln!("Right {}", right);
+            right.expand_ebnf(syn::ebnf::Recursion::Right);
+            println!("Right {}", right);
+
+            let source = read("source code");
+            let root_symbol = syn::bnf::GrammarSymbol::NonTerminal(bnf.rules[0].name);
+
+            let lexer = lang::golang::make_lexer();
+            let tokens = lexer.into_tokens(&source);
+
+            match syn::predictive_parser::parse_tokens(&bnf, root_symbol, tokens) {
+                Ok(tree) => {
+                    println!("{}", tree_util::TreeFmt(&tree));
+                }
+                Err(e) => {
+                    println!("{}", e);
+                }
+            }
         }
         Err(error) => {
-            eprintln!("{}", error);
+            println!("{}", error);
         }
     }
 }
