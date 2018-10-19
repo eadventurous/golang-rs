@@ -640,7 +640,7 @@ mod impls {
                         })?;
                     }
                     Operator(Def) => {
-                        Err(self.error_expected("anything but ::= operator!"))?;
+                        Err(self.error_expected("anything but ::= operator"))?;
                     }
                 }
             }

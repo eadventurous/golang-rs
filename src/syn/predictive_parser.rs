@@ -209,9 +209,9 @@ mod test {
         "#;
         let grammar = Grammar::from_str(source).unwrap();
         let (table, symbol_map) = construct_table(&grammar, NonTerminal("E"));
-        let i = symbol_map[&GrammarSymbol::NonTerminal("E\'")];
+        let i = symbol_map[&GrammarSymbol::NonTerminal("E'")];
         let j = symbol_map[&GrammarSymbol::Terminal("+")];
-        let expected = vec![Terminal("+"), NonTerminal("T"), NonTerminal("E\'")];
+        let expected = vec![Terminal("+"), NonTerminal("T"), NonTerminal("E'")];
         if let Some(ref prod) = table[[i, j]] {
             assert_eq!(prod.1, expected);
         }
