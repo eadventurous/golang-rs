@@ -118,6 +118,8 @@ mod tests {
         <A> ::= (<B> | {"c"}) [<D>] ;
     "#;
 
+    const FILENAME: &str = "test.bnf";
+
     const TOKENS: &[EbnfToken] = &[
         NonTerminal("A"),
         Operator(Def),
@@ -136,7 +138,10 @@ mod tests {
 
     #[test]
     fn test_lexer() {
-        let tokens: Vec<_> = make_lexer().into_tokens(SOURCE).into_raw().collect();
+        let tokens: Vec<_> = make_lexer()
+            .into_tokens(SOURCE, FILENAME.into())
+            .into_raw()
+            .collect();
 
         assert_eq!(tokens, TOKENS);
     }

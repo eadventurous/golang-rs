@@ -6,13 +6,12 @@ use syn::predictive_parser::parse_tokens;
 
 pub fn ebnf() -> Syntax {
     let source = include_str!("golang.bnf");
-    let syntax = ebnf::Parser::new(source, "golang.bnf")
+    let syntax = ebnf::Parser::new(source, "golang.bnf".into())
         .parse()
         .unwrap_or_else(|e| {
             println!("{}", e);
             panic!();
         });
-    println!("{}", syntax);
     syntax
 }
 
@@ -20,11 +19,10 @@ pub fn bnf(ebnf: &mut Syntax) -> Grammar {
     ebnf.ebnf_to_bnf(ebnf::Recursion::Right)
 }
 
-pub fn build_tree(source: &str) -> Result<Tree<String>, String> {
-    println!("source: {}", source);
-    let tokens = make_lexer().into_tokens(source);
+pub fn build_tree(source: &str, filename: String) -> Result<Tree<String>, String> {
+    let tokens = make_lexer().into_tokens(source, filename);
     let mut syntax = ebnf();
+    println!("{}", syntax);
     let grammar = bnf(&mut syntax);
-    println!("{:?}", grammar);
     parse_tokens(&grammar, "Root", tokens)
 }

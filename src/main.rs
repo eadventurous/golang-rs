@@ -36,7 +36,7 @@ fn read(now_what: &str) -> String {
 
 fn main() {
     let source = read("Go code");
-    let tree = syn::golang::build_tree(&source);
+    let tree = syn::golang::build_tree(&source, "<stdin>".into());
     match tree {
         Ok(tree) => println!("{}", tree_util::TreeFmt(&tree)),
         Err(e) => println!("{}", e),
@@ -44,8 +44,10 @@ fn main() {
 }
 
 fn main_2() {
+    const FILENAME: &str = "<stdin>";
+
     let source = read("syntax");
-    let syntax = syn::ebnf::Parser::new(&source, "<stdin>").parse();
+    let syntax = syn::ebnf::Parser::new(&source, FILENAME.into()).parse();
     println!("syntax = {:#?}", syntax);
 
     match syntax {
@@ -64,7 +66,7 @@ fn main_2() {
             let root_symbol = bnf.rules[0].name;
 
             let lexer = lang::golang::make_lexer();
-            let tokens = lexer.into_tokens(&source);
+            let tokens = lexer.into_tokens(&source, FILENAME.into());
 
             match syn::predictive_parser::parse_tokens(&bnf, root_symbol, tokens) {
                 Ok(tree) => {

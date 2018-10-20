@@ -189,6 +189,8 @@ mod test {
     use lang::{brainfuck, golang};
     use tree_util::*;
 
+    const FILENAME: &str = "test.bnf";
+
     #[test]
     fn test_table() {
         let source = r#"
@@ -198,7 +200,7 @@ mod test {
             <T'> ::= "*" <F> <T'> | ""
             <F> ::= "(" <E> ")" | "id"
         "#;
-        let grammar = Grammar::from_str(source).unwrap();
+        let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
         let (table, symbol_map) = construct_table(&grammar, "E");
         let i = symbol_map[&NonTerminal("E'")];
         let j = symbol_map[&Terminal("+")];
@@ -217,10 +219,10 @@ mod test {
             <T'> ::= "Mul" <F> <T'> | ""
             <F> ::= "(" <E> ")" | "Ident"
         "#;
-        let grammar = Grammar::from_str(source).unwrap();
+        let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
         let lexer = golang::make_lexer();
         let input = "one + two * three";
-        let tokens = lexer.into_tokens(input);
+        let tokens = lexer.into_tokens(input, FILENAME.into());
         let tree = parse_tokens(&grammar, "E", tokens).unwrap();
 
         let expected = tree!{
@@ -253,10 +255,10 @@ mod test {
             <Code> ::= <Command> <Code> | ""
             <Command> ::= "Inc" | "Dec" | "Left" | "Right" | "Input" | "Output" | "Cond" <Code> "Loop" | "Comment"
         "#;
-        let grammar = Grammar::from_str(source).unwrap();
+        let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
         // println!("{:#?}", grammar);
         let input = ",[.-[-->++<]>+]";
-        let tokens = brainfuck::make_lexer().into_tokens(input);
+        let tokens = brainfuck::make_lexer().into_tokens(input, FILENAME.into());
         let tree = parse_tokens(&grammar, "Code", tokens).unwrap();
 
         let code_children: Vec<_> = tree
@@ -286,10 +288,10 @@ mod test {
             <T'> ::= "Operator(Mul)" <F> <T'> | ""
             <F> ::= "(" <E> ")" | "id"
         "#;
-        let grammar = Grammar::from_str(source).unwrap();
+        let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
         let lexer = golang::make_lexer();
         let input = "id + + * id";
-        let tokens = lexer.into_tokens(input);
+        let tokens = lexer.into_tokens(input, FILENAME.into());
         assert!(parse_tokens(&grammar, "E", tokens).is_err());
     }
 }

@@ -107,9 +107,9 @@ impl<'a, 'b> GrammarRule<'a, 'b> {
     /// <Name> ::= <Terminal>
     /// ...
     /// ```
-    pub fn from_str(s: &str) -> Result<GrammarRule, &'static str> {
+    pub fn from_str(s: &'a str, filename: String) -> Result<GrammarRule<'a, 'a>, &'static str> {
         let lexer = make_lexer();
-        let mut tokens = lexer.into_tokens(s).into_raw();
+        let mut tokens = lexer.into_tokens(s, filename).into_raw();
 
         let name = match tokens.next() {
             Some(BnfToken::NonTerminal(s)) => s,
@@ -151,17 +151,14 @@ pub fn non_empties<'a, S: AsRef<str>>(iter: impl Iterator<Item = S>) -> impl Ite
 }
 
 impl<'a, 'b> Grammar<'a, 'b> {
-
     pub fn new() -> Self {
-        Self {
-            rules: Vec::new(),
-        }
+        Self { rules: Vec::new() }
     }
-    pub fn from_str(s: &str) -> Result<Grammar, &'static str> {
+    pub fn from_str(s: &'a str, filename: String) -> Result<Grammar<'a, 'a>, &'static str> {
         let mut rules = vec![];
 
         for line in non_empties(s.lines()) {
-            rules.push(GrammarRule::from_str(line)?);
+            rules.push(GrammarRule::from_str(line, filename.clone())?);
         }
         Ok(Grammar { rules })
     }
@@ -214,7 +211,9 @@ impl<'a, 'b> Grammar<'a, 'b> {
                     x_set.insert(s);
                 }
                 NonTerminal(name) => {
-                    let rule = self.get_rule(name).unwrap();
+                    let rule = self
+                        .get_rule(name)
+                        .unwrap_or_else(|| panic!("Invalid grammar! No rule named {}", name));
 
                     for prod in rule.expression.iter() {
                         let mut count = 0;
@@ -272,6 +271,8 @@ impl<'a, 'b> Grammar<'a, 'b> {
 mod test {
     use super::*;
 
+    const FILENAME: &str = "test.bnf";
+
     #[test]
     fn test_grammar_symbol() {
         let symbol = Terminal("");
@@ -293,7 +294,7 @@ mod test {
         let source = r#"
             <opt-suffix-part> ::= "Sr." | "Jr." | <roman-numeral> | ""
         "#;
-        let rule = GrammarRule::from_str(source).unwrap();
+        let rule = GrammarRule::from_str(source, FILENAME.into()).unwrap();
         assert_eq!(rule.name, "opt-suffix-part");
     }
 
@@ -302,7 +303,7 @@ mod test {
         let source = r#"
             <opt-suffix-part> ::= "Sr." | "Jr." <roman-numeral> ""
         "#;
-        let rule = GrammarRule::from_str(source).unwrap();
+        let rule = GrammarRule::from_str(source, FILENAME.into()).unwrap();
         assert_eq!(
             rule.expression,
             vec![
@@ -323,7 +324,7 @@ mod test {
             <A> ::= "a""b" | "a" | ""
             <B> ::= "" | "d"
         "#;
-        let grammar = Grammar::from_str(source).unwrap();
+        let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
         assert_eq!(grammar.first(vec![NonTerminal("A")]), hash_set!["a", ""]);
         assert_eq!(
             grammar.first(vec![NonTerminal("S")]),
@@ -338,7 +339,7 @@ mod test {
             <A> ::= "a""b" | "a" | ""
             <B> ::= "" | "d"
         "#;
-        let grammar = Grammar::from_str(source).unwrap();
+        let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
         assert_eq!(
             grammar.first(vec![NonTerminal("B"), NonTerminal("A")]),
             hash_set!["", "d", "a"]
@@ -354,7 +355,7 @@ mod test {
             <T'> ::= "*" <F> <T'> | ""
             <F> ::= "(" <E> ")" | "id"
         "#;
-        let grammar = Grammar::from_str(source).unwrap();
+        let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
         assert_eq!(grammar.first(vec![NonTerminal("E'")]), hash_set!["+", ""]);
         assert_eq!(grammar.first(vec![NonTerminal("T'")]), hash_set!["*", ""]);
     }
@@ -368,7 +369,7 @@ mod test {
             <T'> ::= "*" <F> <T'> | ""
             <F> ::= "(" <E> ")" | "id"
         "#;
-        let grammar = Grammar::from_str(source).unwrap();
+        let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
         assert_eq!(
             grammar.follow(NonTerminal("E"), NonTerminal("E")),
             hash_set!["$", ")"]

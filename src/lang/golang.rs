@@ -626,7 +626,7 @@ mod test {
 
     macro_rules! must_not_match_token {
         ($lexer:expr, $source:expr, $tok:pat) => {
-            match $lexer.tokens($source).next() {
+            match $lexer.tokens($source, "must-not-match".into()).next() {
                 Some(Ok($crate::lex::TokenMeta { token: $tok, .. })) => {
                     panic!("Token must not match!")
                 }
@@ -634,6 +634,8 @@ mod test {
             }
         };
     }
+
+    const FILENAME: &str = "test.bnf";
 
     #[test]
     fn test_id() {
@@ -799,7 +801,10 @@ mod test {
     fn test_white_space() {
         let lexer = make_lexer();
         let source = " \t\n42\n";
-        let tokens = lexer.into_tokens(source).into_raw().collect::<Vec<_>>();
+        let tokens = lexer
+            .into_tokens(source, FILENAME.into())
+            .into_raw()
+            .collect::<Vec<_>>();
 
         assert_eq!(vec![Literal(GoLiteral::Integer("42"))], tokens);
     }
@@ -808,7 +813,7 @@ mod test {
     fn test_semicolon() {
         let lexer = make_lexer();
         let source = "i++\nj";
-        let tokens = necessary_semicolon(drop_comments(lexer.into_tokens(source)))
+        let tokens = necessary_semicolon(drop_comments(lexer.into_tokens(source, FILENAME.into())))
             .into_raw()
             .collect::<Vec<_>>();
 

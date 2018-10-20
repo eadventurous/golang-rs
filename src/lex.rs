@@ -35,13 +35,13 @@ where
     T: Token<'a>,
 {
     /// Wrap lexer into `Tokens` stream without transfer of ownership.
-    pub fn tokens(&self, source: &'a str) -> Tokens<'a, T> {
-        Tokens::new(self.clone(), source)
+    pub fn tokens<'b>(&self, source: &'a str, filename: String) -> Tokens<'a, T> {
+        Tokens::new(self.clone(), source, filename)
     }
 
     /// Wrap lexer into `Tokens` stream with transfer of ownership.
-    pub fn into_tokens(self, source: &'a str) -> Tokens<'a, T> {
-        Tokens::new(self, source)
+    pub fn into_tokens<'b>(self, source: &'a str, filename: String) -> Tokens<'a, T> {
+        Tokens::new(self, source, filename)
     }
 
     /// ```raw
@@ -90,7 +90,7 @@ where
                     .next()
                     // early return `Err` if empty
                     .ok_or_else(|| Error {
-                        filename: "",
+                        filename: "".into(),
                         span: Span { start: at, end: at },
                         source,
                         description: Some("No token could be matched".to_owned()),
@@ -146,6 +146,7 @@ where
 pub struct Tokens<'a, T> {
     lexer: Lexer<'a, T>,
     source: &'a str,
+    filename: String,
     error: bool,
     /// Next location that lexer should start parsing from, or if the
     /// `location.is_none()` than lexer will start from the beginning.
@@ -153,10 +154,11 @@ pub struct Tokens<'a, T> {
 }
 
 impl<'a, T: Token<'a>> Tokens<'a, T> {
-    fn new(lexer: Lexer<'a, T>, source: &'a str) -> Self {
+    fn new(lexer: Lexer<'a, T>, source: &'a str, filename: String) -> Self {
         Tokens {
             lexer,
             source,
+            filename,
             error: false,
             location: Location {
                 column: 1,
@@ -189,7 +191,7 @@ where
                 }
                 Some(Err(error)) => {
                     self.error = true;
-                    Some(Err(error))
+                    Some(Err(error.filename(self.filename.clone())))
                 }
                 None => {
                     self.error = true;
@@ -786,7 +788,7 @@ pub struct Error<'a, M>
 where
     M: Metrics,
 {
-    pub filename: &'a str,
+    pub filename: String,
     pub source: &'a str,
     pub span: Span<M>,
     pub description: Option<String>,
@@ -818,7 +820,7 @@ where
     M: Metrics,
 {
     pub fn new(
-        filename: &'a str,
+        filename: String,
         source: &'a str,
         span: Span<M>,
         description: Option<String>,
@@ -831,7 +833,7 @@ where
         }
     }
 
-    pub fn filename(mut self, filename: &'a str) -> Self {
+    pub fn filename(mut self, filename: String) -> Self {
         self.filename = filename;
         self
     }
@@ -860,7 +862,7 @@ where
     M: Metrics,
 {
     fn from(e: SimpleError<M>) -> Self {
-        Self::new("<none>", "", e.span, e.description)
+        Self::new("<none>".into(), "", e.span, e.description)
     }
 }
 
@@ -963,7 +965,7 @@ pub fn next<'a, T: Token<'a>>(
     lexer: &Lexer<'a, T>,
     source: &'a str,
 ) -> Option<Result<TokenMeta<T>, Error<'a, Bytes>>> {
-    lexer.tokens(source).next()
+    lexer.tokens(source, "test.bnf".into()).next()
 }
 
 #[cfg(test)]
@@ -1173,7 +1175,7 @@ mod test {
     #[test]
     fn test_error() {
         let error = Error {
-            filename: "<stdin>",
+            filename: "<stdin>".into(),
             span: NUMBERS_BYTES_SPAN,
             source: NUMBERS,
             description: Some("Custom error message.".to_owned()),
@@ -1200,6 +1202,6 @@ Custom error message.
 
         let lexer = make_lexer();
         // type check
-        let _: Vec<BfToken> = lexer.tokens("").into_raw().collect();
+        let _: Vec<BfToken> = lexer.tokens("", "test.bnf".into()).into_raw().collect();
     }
 }

@@ -50,12 +50,14 @@ pub fn make_lexer<'a>() -> Lexer<'a, BfToken<'a>> {
 mod test {
     use super::*;
 
+    const FILENAME: &str = "test.bnf";
+
     #[test]
     fn brainfuck() {
         let source = &r#"++L[>+<-].End"#[..];
 
         let tokens = make_lexer()
-            .into_tokens(source)
+            .into_tokens(source, FILENAME.into())
             .filter_map(Result::ok)
             .map(|meta| meta.token)
             .collect::<Vec<_>>();

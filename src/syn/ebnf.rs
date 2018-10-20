@@ -59,7 +59,7 @@ pub struct Parser<'a> {
     tokens: ::std::iter::Peekable<Tokens<'a, EbnfToken<'a>>>,
     current: Option<MetaResult<'a, EbnfToken<'a>>>,
     source: &'a str,
-    filename: &'a str,
+    filename: String,
 }
 
 mod impls {
@@ -556,8 +556,10 @@ mod impls {
     }
 
     impl<'a> Parser<'a> {
-        pub fn new(source: &'a str, filename: &'a str) -> Self {
-            let tokens = make_lexer().into_tokens(source).peekable();
+        pub fn new(source: &'a str, filename: String) -> Self {
+            let tokens = make_lexer()
+                .into_tokens(source, filename.clone())
+                .peekable();
             Parser {
                 tokens,
                 current: None,
@@ -574,14 +576,14 @@ mod impls {
                 let rule = result.map_err(|e| {
                     ErrorBytes::from(e)
                         .source(self.source)
-                        .filename(self.filename)
+                        .filename(self.filename.clone())
                 })?;
                 syntax.rules.push(rule);
             }
 
             if syntax.rules.is_empty() {
                 Err(ErrorBytes::new(
-                    self.filename,
+                    self.filename.clone(),
                     self.source,
                     Default::default(),
                     Some("Valid syntax must contain at least one rule.".into()),
@@ -720,7 +722,7 @@ mod impls {
                     Some(Err(e)) => e.span,
                     None => Default::default(),
                 },
-                description: Some(description)
+                description: Some(description),
             }
         }
     }
@@ -738,7 +740,7 @@ mod tests {
     #[test]
     fn test_parse_expectation() {
         let source = r#"??? ::= <A> "B" <C>"#;
-        let result = Parser::new(source, FILENAME).parse_rule().unwrap();
+        let result = Parser::new(source, FILENAME.into()).parse_rule().unwrap();
         assert!(result.is_err());
         // println!("{:?}", result.err().unwrap())
     }
@@ -746,21 +748,21 @@ mod tests {
     #[test]
     fn test_parse_empty() {
         let source = " ";
-        let rule = Parser::new(source, FILENAME).parse_rule();
+        let rule = Parser::new(source, FILENAME.into()).parse_rule();
         assert!(rule.is_none());
 
-        let res = Parser::new(source, FILENAME).parse();
+        let res = Parser::new(source, FILENAME.into()).parse();
         assert!(res.is_err());
     }
 
     #[test]
     fn test_parse_no_def() {
         let source = "<A> <AC/DC> <EFG> ::= \"123\" ";
-        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
+        let res = Parser::new(source, FILENAME.into()).parse_rule().unwrap();
         assert!(res.is_err());
 
         let err: Error<_> = res.err().unwrap().into();
-        let err = err.source(source).filename(FILENAME);
+        let err = err.source(source).filename(FILENAME.into());
         // println!("AAA\n{:?}", err);
         // println!("AAA\n{}", err);
         let _ = err;
@@ -769,7 +771,7 @@ mod tests {
     #[test]
     fn test_parse_epsilon() {
         let source = "<A> ::= ";
-        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
+        let res = Parser::new(source, FILENAME.into()).parse_rule().unwrap();
         assert!(res.is_ok());
 
         let rule = res.unwrap();
@@ -780,7 +782,7 @@ mod tests {
     #[test]
     fn test_parse_simple_product() {
         let source = r#" <A> ::= <B> "C" "#;
-        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
+        let res = Parser::new(source, FILENAME.into()).parse_rule().unwrap();
         assert!(res.is_ok());
 
         let rule = res.unwrap();
@@ -797,7 +799,7 @@ mod tests {
     #[test]
     fn test_parse_alternatives() {
         let source = r#" <A> ::= <B> | "#;
-        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
+        let res = Parser::new(source, FILENAME.into()).parse_rule().unwrap();
         assert!(res.is_ok());
 
         let rule = res.unwrap();
@@ -814,7 +816,7 @@ mod tests {
     #[test]
     fn test_parse_group() {
         let source = r#" <A> ::= <B> ("c" | <D> <E> | "f") | "g" "#;
-        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
+        let res = Parser::new(source, FILENAME.into()).parse_rule().unwrap();
         assert!(res.is_ok());
 
         let rule = res.unwrap();
@@ -841,22 +843,22 @@ mod tests {
     #[test]
     fn test_parse_group_unclosed() {
         let source = r#" <A> ::= <B> ( "c" | "#;
-        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
+        let res = Parser::new(source, FILENAME.into()).parse_rule().unwrap();
         assert!(res.is_err());
 
         let source = r#" <A> ::= <B> [ "c" | "#;
-        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
+        let res = Parser::new(source, FILENAME.into()).parse_rule().unwrap();
         assert!(res.is_err());
 
         let source = r#" <A> ::= <B> { "c" | "#;
-        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
+        let res = Parser::new(source, FILENAME.into()).parse_rule().unwrap();
         assert!(res.is_err());
     }
 
     #[test]
     fn test_parse_unexpected_close() {
         let source = r#" <A> ::= ) "#;
-        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
+        let res = Parser::new(source, FILENAME.into()).parse_rule().unwrap();
         assert!(res.is_err());
         // println!("EEE {:?}", res);
     }
@@ -864,7 +866,7 @@ mod tests {
     #[test]
     fn test_parse_unexpected_close_another() {
         let source = r#" <A> ::= { [ "b" } "#;
-        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
+        let res = Parser::new(source, FILENAME.into()).parse_rule().unwrap();
         assert!(res.is_err());
         // println!("EEE {:?}", res);
     }
@@ -872,7 +874,7 @@ mod tests {
     #[test]
     fn test_parse_deep_nesting() {
         let source = r#" <A> ::= { "b" ([<C>] <D> | "e" {"e"} ) } "#;
-        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
+        let res = Parser::new(source, FILENAME.into()).parse_rule().unwrap();
         assert!(res.is_ok());
     }
 
@@ -885,7 +887,7 @@ mod tests {
 
             <D> ::= "e" { "f" <A> } ;
         "#;
-        let res = Parser::new(source, FILENAME).parse();
+        let res = Parser::new(source, FILENAME.into()).parse();
         assert!(res.is_ok());
 
         let syntax = res.unwrap();
@@ -926,7 +928,7 @@ mod tests {
     }
 
     fn bnf(source: &str, recursion: Recursion) -> Syntax {
-        let mut syntax = Parser::new(source, FILENAME).parse().unwrap();
+        let mut syntax = Parser::new(source, FILENAME.into()).parse().unwrap();
         syntax.expand_ebnf(recursion);
         syntax
     }
