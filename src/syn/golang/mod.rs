@@ -5,6 +5,9 @@ use syn::ebnf::{self, Syntax};
 use syn::predictive_parser::parse_tokens;
 use tree_util::*;
 
+#[cfg(test)]
+mod tests;
+
 pub fn ebnf() -> Syntax {
     let source = include_str!("golang.bnf");
     let syntax = ebnf::Parser::new(source, "golang.bnf".into())
@@ -40,19 +43,4 @@ pub fn build_tree(source: &str, filename: String, verbose: bool) -> Result<Tree<
         }
     }
     tree
-}
-
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const FILENAME: &str = "test.go";
-
-    #[test]
-    fn test_empty() {
-        let source = "";
-        let tree = build_tree(source, FILENAME.into(), false);
-        assert!(tree.is_err());
-    }
 }

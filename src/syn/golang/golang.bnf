@@ -1,7 +1,98 @@
-<Root>
-    ::= <Module>
+<Root> ::= <SourceFile> ;
+
+<SourceFile>
+    ::= <PackageClause> ";"
+        { <ImportDecl>    ";" }
     ;
 
-<Module>
-    ::= "Inc"
+
+<PackageClause>
+    ::= "package" <PackageName>
     ;
+<PackageName> ::= "identifier" ;
+
+
+<ImportDecl>
+    ::= "import" ( <ImportSpec>
+                 | "(" { <ImportSpec> ";" } ")"
+                 )
+    ;
+<ImportSpec>
+    ::= [ "." | <PackageName> ] <ImportPath>
+    ;
+<ImportPath> ::= "string_lit" ;
+
+
+<Declaration>
+    ::= <ConstDecl>
+    |   <TypeDecl>
+    |   <VarDecl>
+    ;
+<TopLevelDecl>
+    ::= <Declaration>
+    |   <FunctionDecl>
+    |   <MethodDecl>
+    ;
+
+
+<ConstDecl>
+    ::= "const" (       <ConstSpec>
+                | "(" { <ConstSpec> ";" } ")"
+                )
+    ;
+<ConstSpec>
+    ::= <IdentifierList> [ [ <Type> ] "=" <ExpressionList> ]
+    ;
+
+
+<IdentifierList>
+    ::= "identifier" { "," "identifier" }
+    ;
+<ExpressionList>
+    ::= <Expression> { "," <Expression> }
+    ;
+
+
+<Type>
+    ::= <TypeName>
+    |   <TypeLit>
+    |   "(" <Type> ")"
+    ;
+<TypeName>
+    ::= "identifier"
+    |   <QualifiedIdent>
+    ;
+<QualifiedIdent>
+    ::= <PackageName> "." "identifier"
+    ;
+<TypeLit>
+    ::= <ArrayType>
+    |   <StructType>
+    ;
+
+<ArrayType>
+    ::= "[" <ArrayLength> "]" <ElementType>
+    ;
+<ArrayLength> ::= <Expression> ;
+<ElementType> ::= <Type> ;
+
+
+<StructType>
+    ::= "struct" "{" { <FieldDecl> ";" } "}"
+    ;
+<FieldDecl>
+    ::= (   <IdentifierList> <Type>
+        |   <EmbeddedField>
+        )
+        [ <Tag> ]
+    ;
+<EmbeddedField>
+    ::= [ "*" ] <TypeName>
+    ;
+<Tag> ::= "string_lit" ;
+
+<Expression> ::= "+";
+<TypeDecl> ::= "if";
+<VarDecl> ::= "var";
+<FunctionDecl> ::= "break";
+<MethodDecl> ::= "return";
