@@ -125,7 +125,7 @@ pub struct LexerResult<T> {
     pub t: T,
 }
 
-pub type MetaResult<'a, T> = Result<TokenMeta<T>, Error<'a, Bytes>>;
+pub type MetaResult<'a, T> = Result<TokenMeta<T>, ErrorBytes<'a>>;
 
 pub trait MetaIter<'a, T>: Iterator<Item = MetaResult<'a, T>> {}
 
@@ -807,7 +807,7 @@ pub type ErrorBytes<'a> = Error<'a, Bytes>;
 /// Alias to `Error<Chars>`
 pub type ErrorChars<'a> = Error<'a, Chars>;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct SimpleError<M>
 where
     M: Metrics,
