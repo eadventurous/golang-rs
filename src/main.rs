@@ -26,15 +26,24 @@ pub fn print_tokens<'a, T: Token<'a>, I: MetaIter<'a, T>>(tokens: I) {
     }
 }
 
-fn main() {
-    fn read(now_what: &str) -> String {
-        println!("Reading {} from stdin...", now_what);
-        let mut stdin = std::io::stdin();
-        let mut string = String::new();
-        stdin.read_to_string(&mut string).ok();
-        string
-    }
+fn read(now_what: &str) -> String {
+    println!("Reading {} from stdin...", now_what);
+    let mut stdin = std::io::stdin();
+    let mut string = String::new();
+    stdin.read_to_string(&mut string).ok();
+    string
+}
 
+fn main() {
+    let source = read("Go code");
+    let tree = syn::golang::build_tree(&source);
+    match tree {
+        Ok(tree) => println!("{}", tree_util::TreeFmt(&tree)),
+        Err(e) => println!("{}", e),
+    }
+}
+
+fn main_2() {
     let source = read("syntax");
     let syntax = syn::ebnf::Parser::new(&source, "<stdin>").parse();
     println!("syntax = {:#?}", syntax);
@@ -52,7 +61,7 @@ fn main() {
             println!("Right {}", right);
 
             let source = read("source code");
-            let root_symbol = syn::bnf::GrammarSymbol::NonTerminal(bnf.rules[0].name);
+            let root_symbol = bnf.rules[0].name;
 
             let lexer = lang::golang::make_lexer();
             let tokens = lexer.into_tokens(&source);

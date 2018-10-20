@@ -1,0 +1,7 @@
+<Root>
+    ::= <Module>
+    ;
+
+<Module>
+    ::= "Inc"
+    ;

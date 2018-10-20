@@ -32,13 +32,13 @@ use super::bnf::*;
 use id_tree::InsertBehavior::*;
 use id_tree::*;
 #[allow(unused)]
-use lex::{MetaResult, Token, TokensExt};
+use lex::{MetaIter, MetaResult, Token, TokensExt};
 use ndarray::Array2;
 use std::collections::HashMap;
 
 fn construct_table<'a>(
     grammar: &'a Grammar,
-    start_symbol: GrammarSymbol,
+    start_symbol: &'a str,
 ) -> (
     Array2<Option<GrammarProduction<'a>>>,
     HashMap<GrammarSymbol<'a>, usize>,
@@ -62,32 +62,23 @@ fn construct_table<'a>(
             #[allow(non_snake_case)]
             let first_A = grammar.first(prod.clone());
             for &a in first_A.iter().filter(IsNotEpsilon::is_not_epsilon) {
-                let i = symbol_map[&GrammarSymbol::NonTerminal(rule.name)];
-                let j = symbol_map[&GrammarSymbol::Terminal(a)];
-                table[[i, j]] = Some(GrammarProduction(
-                    GrammarSymbol::NonTerminal(rule.name),
-                    prod.clone(),
-                ));
+                let i = symbol_map[&NonTerminal(rule.name)];
+                let j = symbol_map[&Terminal(a)];
+                table[[i, j]] = Some(GrammarProduction(NonTerminal(rule.name), prod.clone()));
             }
             if first_A.contains(&"") {
                 #[allow(non_snake_case)]
-                let follow_A = grammar.follow(GrammarSymbol::NonTerminal(rule.name), start_symbol);
-                let i = symbol_map[&GrammarSymbol::NonTerminal(rule.name)];
+                let follow_A = grammar.follow(NonTerminal(rule.name), NonTerminal(start_symbol));
+                let i = symbol_map[&NonTerminal(rule.name)];
 
                 if follow_A.contains(&"$") {
-                    let j = symbol_map[&GrammarSymbol::Terminal("$")];
-                    table[[i, j]] = Some(GrammarProduction(
-                        GrammarSymbol::NonTerminal(rule.name),
-                        prod.clone(),
-                    ));
+                    let j = symbol_map[&Terminal("$")];
+                    table[[i, j]] = Some(GrammarProduction(NonTerminal(rule.name), prod.clone()));
                 }
 
                 for &b in follow_A.iter().filter(IsNotEpsilon::is_not_epsilon) {
-                    let j = symbol_map[&GrammarSymbol::Terminal(b)];
-                    table[[i, j]] = Some(GrammarProduction(
-                        GrammarSymbol::NonTerminal(rule.name),
-                        prod.clone(),
-                    ));
+                    let j = symbol_map[&Terminal(b)];
+                    table[[i, j]] = Some(GrammarProduction(NonTerminal(rule.name), prod.clone()));
                 }
             }
         }
@@ -103,13 +94,13 @@ fn construct_table<'a>(
 /// `Ok(`[`Tree`]`)` whose root element is `root_symbol` or `Err()` with string description.
 ///
 /// [`Tree`]: https://docs.rs/id_tree/1.3.0/id_tree/struct.Tree.html
-pub fn parse_tokens<'a, 'b, I, T>(
-    grammar: &'a Grammar,
-    root_symbol: GrammarSymbol<'a>,
+pub fn parse_tokens<'a, I, T>(
+    grammar: &Grammar,
+    root_symbol: &str,
     tokens: I,
 ) -> Result<Tree<String>, String>
 where
-    I: Iterator<Item = MetaResult<'a, T>>,
+    I: MetaIter<'a, T>,
     T: Token<'a>,
 {
     let (table, symbol_map) = construct_table(grammar, root_symbol);
@@ -119,17 +110,17 @@ where
         .with_node_capacity(symbol_map.len())
         .build();
 
-    let root_str = root_symbol.to_str();
+    let root_symbol = NonTerminal(root_symbol);
     let root_id: NodeId = tree
-        .insert(Node::new(root_str.clone()), AsRoot)
+        .insert(Node::new(root_symbol.to_str()), AsRoot)
         .map_err(|e| format!("{}", e))?;
 
-    let tokens_str = tokens
+    let mut iter = tokens
         .map(|t| {
             let token = t.unwrap().token;
             (token.descriptor(), Some(token))
-        }).collect::<Vec<_>>();
-    let mut iter = tokens_str.into_iter().chain(::std::iter::once(("$", None)));
+        }).into_iter()
+        .chain(::std::iter::once(("$", None)));
 
     let mut stack: Vec<(GrammarSymbol, NodeId)> =
         vec![(Terminal("$"), root_id.clone()), (root_symbol, root_id)];
@@ -141,7 +132,7 @@ where
     while let Some((last_symbol, last_node_id)) = stack.last().cloned() {
         //println!("stack: {:?}, input: {}", stack, input);
         match last_symbol {
-            GrammarSymbol::Terminal(s) if s == input.0 => {
+            Terminal(s) if s == input.0 => {
                 if let Some(token) = &input.1 {
                     tree.get_mut(&last_node_id)
                         .unwrap()
@@ -154,7 +145,7 @@ where
                     i += 1;
                 }
             }
-            GrammarSymbol::Terminal(s) => Err(format!(
+            Terminal(s) => Err(format!(
                 "Expected {:?}, got {} at token number {}",
                 last_symbol, s, i
             ))?,
@@ -163,7 +154,7 @@ where
                     .get(&last_symbol)
                     .ok_or_else(|| format!("Non-terminal {:?} not found!", last_symbol))?;
                 let j = *symbol_map
-                    .get(&GrammarSymbol::Terminal(input.0))
+                    .get(&Terminal(input.0))
                     .ok_or_else(|| format!("Terminal {:?} not found!", input))?;
                 let prod = table[[i, j]].as_ref().ok_or_else(|| {
                     format!(
@@ -208,9 +199,9 @@ mod test {
             <F> ::= "(" <E> ")" | "id"
         "#;
         let grammar = Grammar::from_str(source).unwrap();
-        let (table, symbol_map) = construct_table(&grammar, NonTerminal("E"));
-        let i = symbol_map[&GrammarSymbol::NonTerminal("E'")];
-        let j = symbol_map[&GrammarSymbol::Terminal("+")];
+        let (table, symbol_map) = construct_table(&grammar, "E");
+        let i = symbol_map[&NonTerminal("E'")];
+        let j = symbol_map[&Terminal("+")];
         let expected = vec![Terminal("+"), NonTerminal("T"), NonTerminal("E'")];
         if let Some(ref prod) = table[[i, j]] {
             assert_eq!(prod.1, expected);
@@ -230,7 +221,7 @@ mod test {
         let lexer = golang::make_lexer();
         let input = "one + two * three";
         let tokens = lexer.into_tokens(input);
-        let tree = parse_tokens(&grammar, NonTerminal("E"), tokens).unwrap();
+        let tree = parse_tokens(&grammar, "E", tokens).unwrap();
 
         let expected = tree!{
           "E" => {
@@ -266,7 +257,7 @@ mod test {
         // println!("{:#?}", grammar);
         let input = ",[.-[-->++<]>+]";
         let tokens = brainfuck::make_lexer().into_tokens(input);
-        let tree = parse_tokens(&grammar, NonTerminal("Code"), tokens).unwrap();
+        let tree = parse_tokens(&grammar, "Code", tokens).unwrap();
 
         let code_children: Vec<_> = tree
             .children(tree.root_node_id().unwrap())
@@ -299,6 +290,6 @@ mod test {
         let lexer = golang::make_lexer();
         let input = "id + + * id";
         let tokens = lexer.into_tokens(input);
-        assert!(parse_tokens(&grammar, NonTerminal("E"), tokens).is_err());
+        assert!(parse_tokens(&grammar, "E", tokens).is_err());
     }
 }
