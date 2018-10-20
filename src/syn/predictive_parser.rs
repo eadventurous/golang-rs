@@ -214,10 +214,10 @@ mod test {
     fn test_parser_expr() {
         let source = r#"
             <E> ::= <T> <E'>
-            <E'> ::= "Add" <T> <E'> | ""
+            <E'> ::= "+" <T> <E'> | ""
             <T> ::= <F> <T'>
-            <T'> ::= "Mul" <F> <T'> | ""
-            <F> ::= "(" <E> ")" | "Ident"
+            <T'> ::= "*" <F> <T'> | ""
+            <F> ::= "(" <E> ")" | "identifier"
         "#;
         let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
         let lexer = golang::make_lexer();
