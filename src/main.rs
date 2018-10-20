@@ -36,7 +36,7 @@ fn main() {
     }
 
     let source = read("syntax");
-    let syntax = syn::ebnf::Parser::parse(&source, "<stdin>");
+    let syntax = syn::ebnf::Parser::new(&source, "<stdin>").parse();
     println!("syntax = {:#?}", syntax);
 
     match syntax {

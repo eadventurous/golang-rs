@@ -819,8 +819,8 @@ where
 {
     pub fn new(
         filename: &'a str,
-        span: Span<M>,
         source: &'a str,
+        span: Span<M>,
         description: Option<String>,
     ) -> Self {
         Error {
@@ -860,7 +860,7 @@ where
     M: Metrics,
 {
     fn from(e: SimpleError<M>) -> Self {
-        Self::new("<none>", e.span, "", e.description)
+        Self::new("<none>", "", e.span, e.description)
     }
 }
 

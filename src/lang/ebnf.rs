@@ -6,7 +6,10 @@
 //! - 2 operators, namely: 'definition' (`::=`) and 'alternative' (`|`);
 //! - repetitions (`{`, `}`);
 //! - options (`[`, `]`);
-//! - grouping parenthesis (`(`, `)`).
+//! - grouping parenthesis (`(`, `)`);
+//! - rules delimiter: a semicolon (`;`).
+//!
+//! Delimiter is optional after the last rule.
 pub use self::{EbnfOperator::*, EbnfToken::*, Side::*};
 use lex::{Lexer, LexerBuilder, Token};
 
@@ -18,6 +21,7 @@ pub enum EbnfToken<'a> {
     Repeat(Side),
     Optional(Side),
     Group(Side),
+    Delimiter,
 }
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
@@ -64,6 +68,7 @@ pub fn make_lexer<'a>() -> Lexer<'a, EbnfToken<'a>> {
         .add(r"\]", constant!(Optional(End)))
         .add(r"\(", constant!(Group(Start)))
         .add(r"\)", constant!(Group(End)))
+        .add(r";", constant!(Delimiter))
         .build()
 }
 
@@ -81,6 +86,7 @@ impl<'a> Token<'a> for EbnfToken<'a> {
                 Optional(End) => "]",
                 Group(Start) => "(",
                 Group(End) => ")",
+                Delimiter => ";",
                 _ => unreachable!(),
             }.to_string(),
         }
@@ -98,6 +104,7 @@ impl<'a> Token<'a> for EbnfToken<'a> {
             Optional(End) => "]",
             Group(Start) => "(",
             Group(End) => ")",
+            Delimiter => ";",
         }
     }
 }
@@ -108,7 +115,7 @@ mod tests {
     use lex::TokensExt;
 
     const SOURCE: &str = r#"
-        <A> ::= (<B> | {"c"}) [<D>]
+        <A> ::= (<B> | {"c"}) [<D>] ;
     "#;
 
     const TOKENS: &[EbnfToken] = &[
@@ -124,6 +131,7 @@ mod tests {
         Optional(Start),
         NonTerminal("D"),
         Optional(End),
+        Delimiter,
     ];
 
     #[test]

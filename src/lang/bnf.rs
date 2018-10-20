@@ -1,9 +1,12 @@
 //! # BNF lexer
 //!
-//! BNF language consists of the following lexemes:
-//! - terminals (e.g.: `"fn"`, `">="`),
-//! - non-terminals (e.g.: `<Condition>`, `<Rule>`)
-//! - 2 operators, namely: 'definition' (`::=`) and 'alternative' (`|`).
+//! This variant of BNF language consists of the following lexemes:
+//! - terminals in double quotes (e.g.: `"fn"`, `">="`);
+//! - non-terminals in triangle quotes (e.g.: `<Condition>`, `<Rule>`);
+//! - 2 operators: 'definition' (`::=`) and 'alternative' (`|`);
+//! - rules delimiter: a semicolon (`;`).
+//!
+//! Delimiter is optional after the last rule.
 use lex::{Lexer, LexerBuilder, Token};
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
@@ -11,6 +14,7 @@ pub enum BnfToken<'a> {
     Terminal(&'a str),
     NonTerminal(&'a str),
     Operator(BnfOperator),
+    Delimiter,
 }
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
@@ -41,6 +45,7 @@ fn whitespace_filter(source: &str) -> &str {
 pub fn make_lexer<'a>() -> Lexer<'a, BnfToken<'a>> {
     LexerBuilder::new()
         .skip_whitespaces(whitespace_filter)
+        .add(r";", constant!(BnfToken::Delimiter))
         .add(r"::=", constant!(BnfToken::Operator(BnfOperator::Def)))
         .add(r"\|", constant!(BnfToken::Operator(BnfOperator::Alt)))
         .add(r"<(.+?)>", |c| {
@@ -57,6 +62,7 @@ impl<'a> Token<'a> for BnfToken<'a> {
             BnfToken::NonTerminal(..) => "NonTerminal",
             BnfToken::Operator(BnfOperator::Def) => "::=",
             BnfToken::Operator(BnfOperator::Alt) => "|",
+            BnfToken::Delimiter => ";",
         }
     }
 }
@@ -69,7 +75,7 @@ mod tests {
     use lex::TokensExt;
 
     const SOURCE: &str = r#"
-        <A> ::= <B> | "c" <D>
+        <A> ::= <B> | "c" <D> ;
     "#;
 
     const TOKENS: &[BnfToken] = &[
@@ -79,6 +85,7 @@ mod tests {
         Operator(Alt),
         Terminal("c"),
         NonTerminal("D"),
+        Delimiter,
     ];
 
     #[test]

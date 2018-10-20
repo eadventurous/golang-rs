@@ -1,7 +1,7 @@
 //! # EBNF syntax parser and converter
 
 use lang::ebnf::*;
-use lex::MetaResult;
+use lex::{MetaResult, Tokens};
 
 #[derive(Clone, Debug)]
 pub struct Syntax {
@@ -39,7 +39,7 @@ pub enum Primary {
 pub type Term = Primary;
 pub type Factor = Primary;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Nesting {
     Optional,
     Repeated,
@@ -55,24 +55,19 @@ pub enum Recursion {
     Right,
 }
 
-type EbnfTokens<'a> = ::lex::Tokens<'a, EbnfToken<'a>>;
-
 pub struct Parser<'a> {
-    /// Source text
+    tokens: ::std::iter::Peekable<Tokens<'a, EbnfToken<'a>>>,
+    current: Option<MetaResult<'a, EbnfToken<'a>>>,
     source: &'a str,
-    /// Current token.
-    t: Option<MetaResult<'a, EbnfToken<'a>>>,
-    /// Iterator over tokens stream.
-    iter: EbnfTokens<'a>,
+    filename: &'a str,
 }
 
 mod impls {
-    use super::super::bnf;
     use super::*;
-    use lex::{ErrorBytes, MetaResult, SimpleErrorBytes, Span, Token, TokenMeta};
+    use lex::{ErrorBytes, MetaResult, SimpleErrorBytes, Token, TokenMeta};
     use std::fmt::{self, Display, Formatter};
     use std::ops::{Deref, DerefMut};
-    use syn::bnf::non_empties;
+    use syn::bnf::{self, IsEpsilon};
 
     impl Syntax {
         pub fn new() -> Self {
@@ -561,147 +556,172 @@ mod impls {
     }
 
     impl<'a> Parser<'a> {
-        fn new(source: &'a str, iter: EbnfTokens<'a>) -> Self {
+        pub fn new(source: &'a str, filename: &'a str) -> Self {
+            let tokens = make_lexer().into_tokens(source).peekable();
             Parser {
+                tokens,
+                current: None,
                 source,
-                t: None,
-                iter,
+                filename,
             }
         }
 
-        pub fn parse(source: &'a str, filename: &'a str) -> Result<Syntax, ErrorBytes<'a>> {
+        /// Parse EBNF syntax definitions. Valid syntax must contain at least one rule.
+        pub fn parse(&mut self) -> Result<Syntax, ErrorBytes<'a>> {
             let mut syntax = Syntax::new();
 
-            for line in non_empties(source.lines()) {
-                let rule = Self::parse_rule(line)
-                    .map_err(|e| ErrorBytes::from(e).source(source).filename(filename))?;
+            while let Some(result) = self.parse_rule() {
+                let rule = result.map_err(|e| {
+                    ErrorBytes::from(e)
+                        .source(self.source)
+                        .filename(self.filename)
+                })?;
                 syntax.rules.push(rule);
             }
 
-            Ok(syntax)
+            if syntax.rules.is_empty() {
+                Err(ErrorBytes::new(
+                    self.filename,
+                    self.source,
+                    Default::default(),
+                    Some("Valid syntax must contain at least one rule.".into()),
+                ))
+            } else {
+                Ok(syntax)
+            }
         }
 
-        pub fn parse_rule(source: &'a str) -> Result<Rule, SimpleErrorBytes> {
-            let iter = make_lexer().tokens(source);
-            let mut this = Parser::new(source, iter);
+        /// Parse EBNF rule up to (and including) delimiter or EOF.
+        pub fn parse_rule(&mut self) -> Option<Result<Rule, SimpleErrorBytes>> {
+            // non terminal (name) or EOF
+            self.tokens.peek()?;
+            let name = match self.next_non_terminal() {
+                Err(e) => return Some(Err(e)),
+                Ok(name) => name,
+            };
+            // ::=
+            match self.next_exact(Operator(Def)) {
+                Err(e) => return Some(Err(e)),
+                _ => {}
+            };
+            // definition up to delimiter or EOF
+            let definitions = match self.parse_alternatives(None) {
+                Err(e) => return Some(Err(e)),
+                Ok(definitions) => definitions,
+            };
 
-            let name = this.expect_non_terminal()?;
-            this.expect_exact(Operator(Def))?;
-            let definitions = this.parse_alternatives(None)?;
-
-            Ok(Rule::new(name, definitions))
+            Some(Ok(Rule::new(name, definitions)))
         }
 
         fn parse_alternatives(
             &mut self,
             nesting: Option<Nesting>,
         ) -> Result<DefinitionList, SimpleErrorBytes> {
-            let mut definitions = vec![];
-            let mut def = vec![];
+            let mut definitions = DefinitionList(vec![]);
+            let mut def = Definition(vec![]);
 
-            while let Some(Ok(meta)) = self.next() {
-                match meta.token.clone() {
-                    Terminal(t) => {
-                        let terminal = if t == "" {
-                            Primary::Epsilon
-                        } else {
-                            Primary::Terminal(t.to_owned())
-                        };
-                        def.push(terminal);
-                    }
-                    NonTerminal(t) => {
-                        def.push(Primary::NonTerminal(t.to_owned()));
-                    }
-                    Operator(Alt) => {
-                        definitions.push(Definition(def));
-                        def = vec![];
-                    }
-                    Group(Start) => {
-                        let list = self.parse_alternatives(Some(Nesting::Grouped))?;
-                        def.push(Primary::Grouped(list));
-                    }
-                    Optional(Start) => {
-                        let list = self.parse_alternatives(Some(Nesting::Optional))?;
-                        def.push(Primary::Optional(list));
-                    }
-                    Repeat(Start) => {
-                        let list = self.parse_alternatives(Some(Nesting::Repeated))?;
-                        def.push(Primary::Repeated(list));
-                    }
-                    Group(End) if Some(Nesting::Grouped) == nesting => break,
-                    Optional(End) if Some(Nesting::Optional) == nesting => break,
-                    Repeat(End) if Some(Nesting::Repeated) == nesting => break,
-                    Group(End) | Optional(End) | Repeat(End) => {
-                        Err(match nesting {
-                            Some(ref nesting) => self.error_expected(nesting.expected()),
-                            None => self.error_expected(
-                                "none of enclosing parenthesis at top level definition",
-                            ),
-                        })?;
-                    }
-                    Operator(Def) => {
-                        Err(self.error_expected("anything but ::= operator"))?;
+            loop {
+                match self.next().clone() {
+                    Some(Err(e)) => return Err(e.into()),
+                    Some(Ok(TokenMeta { ref token, .. })) => match token {
+                        Terminal(t) => {
+                            let terminal = if t.is_epsilon() {
+                                Primary::Epsilon
+                            } else {
+                                Primary::Terminal((*t).to_owned())
+                            };
+                            def.push(terminal);
+                        }
+                        NonTerminal(t) => {
+                            def.push(Primary::NonTerminal((*t).to_owned()));
+                        }
+                        Operator(Alt) => {
+                            definitions.push(def);
+                            def = Definition(vec![]);
+                        }
+                        Group(Start) => {
+                            let list = self.parse_alternatives(Some(Nesting::Grouped))?;
+                            def.push(Primary::Grouped(list));
+                        }
+                        Optional(Start) => {
+                            let list = self.parse_alternatives(Some(Nesting::Optional))?;
+                            def.push(Primary::Optional(list));
+                        }
+                        Repeat(Start) => {
+                            let list = self.parse_alternatives(Some(Nesting::Repeated))?;
+                            def.push(Primary::Repeated(list));
+                        }
+                        Group(End) if Some(Nesting::Grouped) == nesting => break,
+                        Optional(End) if Some(Nesting::Optional) == nesting => break,
+                        Repeat(End) if Some(Nesting::Repeated) == nesting => break,
+                        Delimiter if None == nesting => break,
+                        Group(End) | Optional(End) | Repeat(End) | Delimiter => {
+                            return Err(match nesting {
+                                Some(ref nesting) => self.error_expected(nesting.expected()),
+                                None => self.error_expected(
+                                    "none of enclosing parenthesis at top level definition",
+                                ),
+                            })
+                        }
+                        Operator(Def) => {
+                            Err(self.error_expected("anything but ::= operator"))?;
+                        }
+                    },
+                    None => {
+                        match nesting {
+                            // no more tokens but nested groups left opened.
+                            Some(nesting) => Err(self.error_expected(nesting.expected()))?,
+                            // no more tokens nor nesting
+                            None => break,
+                        }
                     }
                 }
             }
-            definitions.push(Definition(def));
-            match (self.current(), nesting) {
-                (Some(Err(e)), _) => Err(e.clone().into()),
-                (Some(Ok(..)), _) | (None, None) => {
-                    // no more tokens nor nesting
-                    Ok(DefinitionList(definitions))
+            definitions.push(def);
+            Ok(definitions)
+        }
+
+        /// Reference to current token if there is one.
+        fn current(&self) -> Option<&MetaResult<'a, EbnfToken<'a>>> {
+            self.current.as_ref()
+        }
+
+        /// Advance iterator.
+        fn next(&mut self) -> &Option<MetaResult<'a, EbnfToken<'a>>> {
+            self.current = self.tokens.next();
+            &self.current
+        }
+
+        fn next_non_terminal(&mut self) -> Result<&'a str, SimpleErrorBytes> {
+            if let Some(Ok(TokenMeta { token, .. })) = self.next() {
+                if let NonTerminal(t) = token {
+                    return Ok(t.clone());
                 }
-                // no more tokens but nested groups left opened.
-                (None, Some(ref nesting)) => Err(self.error_expected(nesting.expected())),
             }
+            Err(self.error_expected("non-terminal"))
         }
 
-        fn current(&self) -> Option<MetaResult<'a, EbnfToken<'a>>> {
-            self.t.clone()
-        }
-
-        fn next(&mut self) -> Option<MetaResult<'a, EbnfToken<'a>>> {
-            let result = self.iter.next();
-            self.t = result;
-            self.current()
-        }
-
-        fn expect_non_terminal(&mut self) -> Result<&'a str, SimpleErrorBytes> {
-            match self.next() {
-                Some(Ok(TokenMeta {
-                    token: NonTerminal(t),
-                    ..
-                })) => Ok(t),
-                _ => Err(self.error_expected("non-terminal.")),
+        /// Match exact same token (using `==`).
+        fn next_exact(&mut self, tok: EbnfToken<'a>) -> Result<(), SimpleErrorBytes> {
+            if let Some(Ok(TokenMeta { token, .. })) = self.next() {
+                if tok == *token {
+                    return Ok(());
+                }
             }
-        }
-
-        fn expect_exact(&mut self, tok: EbnfToken<'a>) -> Result<(), SimpleErrorBytes> {
-            match self.next() {
-                Some(Ok(TokenMeta { token, .. })) if tok == token => Ok(()),
-                _ => Err(self.error_expected(tok.descriptor())),
-            }
+            Err(self.error_expected(tok.descriptor()))
         }
 
         fn error_expected(&self, expectation: &str) -> SimpleErrorBytes {
             let description = format!("Expected {}.", expectation);
-            match self.current() {
-                Some(Ok(meta)) => Into::<SimpleErrorBytes>::into(meta.clone()),
-                Some(Err(e)) => Into::<SimpleErrorBytes>::into(e.clone()),
-                None => {
-                    let span = self
-                        .current()
-                        .clone()
-                        .and_then(|x| x.ok())
-                        .map(|t| t.span)
-                        .or_else(|| Span::over(self.source))
-                        .unwrap_or_default();
-                    SimpleErrorBytes {
-                        span,
-                        description: None,
-                    }
-                }
-            }.description(Some(description))
+
+            SimpleErrorBytes {
+                span: match self.current() {
+                    Some(Ok(meta)) => meta.span,
+                    Some(Err(e)) => e.span,
+                    None => Default::default(),
+                },
+                description: Some(description)
+            }
         }
     }
 }
@@ -718,7 +738,7 @@ mod tests {
     #[test]
     fn test_parse_expectation() {
         let source = r#"??? ::= <A> "B" <C>"#;
-        let result = Parser::parse_rule(source);
+        let result = Parser::new(source, FILENAME).parse_rule().unwrap();
         assert!(result.is_err());
         // println!("{:?}", result.err().unwrap())
     }
@@ -726,21 +746,17 @@ mod tests {
     #[test]
     fn test_parse_empty() {
         let source = " ";
-        let res = Parser::parse_rule(source);
-        assert!(res.is_err());
+        let rule = Parser::new(source, FILENAME).parse_rule();
+        assert!(rule.is_none());
 
-        let err = res.err().unwrap();
-        let err: Error<_> = err.into();
-        let err = err.source(source).filename(FILENAME);
-        // println!("AAAAAAA: {:?}", err);
-        // println!("AAAAAAA:\n{}", err);
-        let _ = err;
+        let res = Parser::new(source, FILENAME).parse();
+        assert!(res.is_err());
     }
 
     #[test]
     fn test_parse_no_def() {
         let source = "<A> <AC/DC> <EFG> ::= \"123\" ";
-        let res = Parser::parse_rule(source);
+        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
         assert!(res.is_err());
 
         let err: Error<_> = res.err().unwrap().into();
@@ -753,7 +769,7 @@ mod tests {
     #[test]
     fn test_parse_epsilon() {
         let source = "<A> ::= ";
-        let res = Parser::parse_rule(source);
+        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
         assert!(res.is_ok());
 
         let rule = res.unwrap();
@@ -764,7 +780,7 @@ mod tests {
     #[test]
     fn test_parse_simple_product() {
         let source = r#" <A> ::= <B> "C" "#;
-        let res = Parser::parse_rule(source);
+        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
         assert!(res.is_ok());
 
         let rule = res.unwrap();
@@ -781,7 +797,7 @@ mod tests {
     #[test]
     fn test_parse_alternatives() {
         let source = r#" <A> ::= <B> | "#;
-        let res = Parser::parse_rule(source);
+        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
         assert!(res.is_ok());
 
         let rule = res.unwrap();
@@ -798,7 +814,7 @@ mod tests {
     #[test]
     fn test_parse_group() {
         let source = r#" <A> ::= <B> ("c" | <D> <E> | "f") | "g" "#;
-        let res = Parser::parse_rule(source);
+        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
         assert!(res.is_ok());
 
         let rule = res.unwrap();
@@ -825,22 +841,22 @@ mod tests {
     #[test]
     fn test_parse_group_unclosed() {
         let source = r#" <A> ::= <B> ( "c" | "#;
-        let res = Parser::parse_rule(source);
+        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
         assert!(res.is_err());
 
         let source = r#" <A> ::= <B> [ "c" | "#;
-        let res = Parser::parse_rule(source);
+        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
         assert!(res.is_err());
 
         let source = r#" <A> ::= <B> { "c" | "#;
-        let res = Parser::parse_rule(source);
+        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
         assert!(res.is_err());
     }
 
     #[test]
     fn test_parse_unexpected_close() {
         let source = r#" <A> ::= ) "#;
-        let res = Parser::parse_rule(source);
+        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
         assert!(res.is_err());
         // println!("EEE {:?}", res);
     }
@@ -848,7 +864,7 @@ mod tests {
     #[test]
     fn test_parse_unexpected_close_another() {
         let source = r#" <A> ::= { [ "b" } "#;
-        let res = Parser::parse_rule(source);
+        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
         assert!(res.is_err());
         // println!("EEE {:?}", res);
     }
@@ -856,7 +872,7 @@ mod tests {
     #[test]
     fn test_parse_deep_nesting() {
         let source = r#" <A> ::= { "b" ([<C>] <D> | "e" {"e"} ) } "#;
-        let res = Parser::parse_rule(source);
+        let res = Parser::new(source, FILENAME).parse_rule().unwrap();
         assert!(res.is_ok());
     }
 
@@ -864,12 +880,12 @@ mod tests {
     #[test]
     fn test_whole_syntax() {
         let source = r#"
-            <A> ::= "d" [ <B> ]
-            <B> ::= "c" <A> | <D>
+            <A> ::= "d" [ <B> ] ;
+            <B> ::= "c" <A> | <D> ;
 
-            <D> ::= "e" { "f" <A> }
+            <D> ::= "e" { "f" <A> } ;
         "#;
-        let res = Parser::parse(source, FILENAME);
+        let res = Parser::new(source, FILENAME).parse();
         assert!(res.is_ok());
 
         let syntax = res.unwrap();
@@ -910,7 +926,7 @@ mod tests {
     }
 
     fn bnf(source: &str, recursion: Recursion) -> Syntax {
-        let mut syntax = Parser::parse(source, FILENAME).unwrap();
+        let mut syntax = Parser::new(source, FILENAME).parse().unwrap();
         syntax.expand_ebnf(recursion);
         syntax
     }
