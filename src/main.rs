@@ -39,7 +39,6 @@ fn main() {
     let _ = syn::golang::build_tree(&source, "<stdin>".into(), true);
 }
 
-
 #[cfg(none)]
 fn main_2() {
     const FILENAME: &str = "<stdin>";

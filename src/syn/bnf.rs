@@ -298,8 +298,8 @@ impl<'a, 'b> Grammar<'a, 'b> {
 
 mod impls {
     use super::*;
-    use std::fmt::{Display, Formatter, Result};
     use lex::Token;
+    use std::fmt::{Display, Formatter, Result};
 
     impl<'a> GrammarSymbol<'a> {
         pub fn token(&self) -> BnfToken {

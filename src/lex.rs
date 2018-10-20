@@ -783,7 +783,7 @@ where
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct Error<'a, M>
 where
     M: Metrics,
@@ -848,7 +848,7 @@ where
         self
     }
 
-    pub fn description<S>(mut self, description: Option<String>) -> Self
+    pub fn description<S>(mut self, description: Option<S>) -> Self
     where
         S: Into<String>,
     {
