@@ -855,11 +855,11 @@ where
         self
     }
 
-    pub fn description<S>(mut self, description: Option<S>) -> Self
+    pub fn description<S>(mut self, description: S) -> Self
     where
         S: Into<String>,
     {
-        self.description = description.map(Into::into);
+        self.description = Some(description.into());
         self
     }
 }
@@ -894,11 +894,11 @@ where
         self
     }
 
-    pub fn description<S>(mut self, description: Option<S>) -> Self
+    pub fn description<S>(mut self, description: S) -> Self
     where
         S: Into<String>,
     {
-        self.description = description.map(Into::into);
+        self.description = Some(description.into());
         self
     }
 }

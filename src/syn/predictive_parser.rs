@@ -165,7 +165,7 @@ where
                 let (span, symbol) = span_and_symbol(input);
                 let err = err // no source and filename at the moment
                     .span(span) // what if span is empty?
-                    .description(Some(format!("Expected terminal {:?}, got {:?}.", last_symbol, symbol)));
+                    .description(format!("Expected terminal {:?}, got {:?}.", last_symbol, symbol));
                 // TODO: return Err(err)
                 return Err(format!("{}", err));
             }
@@ -180,10 +180,10 @@ where
                     Some(prod) => prod,
                     None => {
                         let (span, symbol) = span_and_symbol(input);
-                        let err = err.span(span).description(Some(format!(
+                        let err = err.span(span).description(format!(
                             "No grammar rule for {:?} given token {:?}.",
                             last_symbol, symbol
-                        )));
+                        ));
                         // TODO: return Err(err)
                         return Err(format!("{}", err));
                     }
