@@ -1,8 +1,8 @@
 use super::*;
 
+use std::ffi::OsStr;
 use std::fs::{self, DirEntry};
 use std::path::{Path, PathBuf};
-use std::ffi::OsStr;
 
 pub fn base() -> &'static Path {
     Path::new("src/syn/golang/tests/sources")
@@ -45,5 +45,19 @@ fn test_err() {
             file.file_name().unwrap(),
             TreeFmt(&tree.unwrap())
         );
+    }
+}
+
+/// Use it to debug some particular files.
+#[test]
+fn print_tree() {
+    let filenames: &[&str] = &[];
+    for file in filenames
+        .into_iter()
+        .map(|filename| base().join("ok").join(filename))
+    {
+        let tree = load_tree_from(&file).unwrap();
+        println!("{:?}", file.file_name().unwrap());
+        println!("{}", TreeFmt(&tree));
     }
 }
