@@ -531,14 +531,10 @@ impl<'a, I> NecessarySemicolon<'a, I> {
         !self.same_line(other)
     }
 
-    fn insert_semicolon(&mut self, next: TokenMeta<GoToken<'a>>) -> TokenMeta<GoToken<'a>> {
-        assert!(self.pending.is_none());
-
+    fn insert_semicolon(after: &TokenMeta<GoToken<'a>>) -> TokenMeta<GoToken<'a>> {
         // semicolon spans directly after last token
-        let last = self.last.as_ref().unwrap().span.end;
+        let last = after.span.end;
         let loc = Location::new(last.line, last.column + 1, last.absolute + 1);
-
-        self.pending = Some(next);
 
         TokenMeta {
             span: Span::from_location(loc),
@@ -557,23 +553,17 @@ impl<'a, I> NecessarySemicolon<'a, I> {
     fn process(&mut self, meta: TokenMeta<GoToken<'a>>) -> TokenMeta<GoToken<'a>> {
         /* rule one */
         if self.new_line(&meta) {
-            match self.last {
-                Some(..) => match self.last.as_ref().unwrap().token {
-                    /**/
-                    Ident(..)
-                    | Literal(..)
-                    | Keyword(GoKeyword::Continue)
-                    | Keyword(GoKeyword::Break)
-                    | Keyword(GoKeyword::Fallthrough)
-                    | Keyword(GoKeyword::Return)
-                    | Operator(GoOperator::Inc)
-                    | Operator(GoOperator::Dec)
-                    | Operator(GoOperator::RParen)
-                    | Operator(GoOperator::RBrace)
-                    | Operator(GoOperator::RBrack) => self.insert_semicolon(meta),
-                    _ => meta,
-                },
-                // first token ever
+            match self
+                .last
+                .take()
+                .filter(Self::rule_1)
+                .as_ref()
+                .map(Self::insert_semicolon)
+            {
+                Some(semi) => {
+                    self.pending = Some(meta);
+                    semi
+                }
                 None => meta,
             }
         } else if false {
@@ -582,6 +572,23 @@ impl<'a, I> NecessarySemicolon<'a, I> {
             meta
         } else {
             meta
+        }
+    }
+
+    fn rule_1(token: &TokenMeta<GoToken<'a>>) -> bool {
+        match token.token {
+            Ident(..)
+            | Literal(..)
+            | Keyword(GoKeyword::Continue)
+            | Keyword(GoKeyword::Break)
+            | Keyword(GoKeyword::Fallthrough)
+            | Keyword(GoKeyword::Return)
+            | Operator(GoOperator::Inc)
+            | Operator(GoOperator::Dec)
+            | Operator(GoOperator::RParen)
+            | Operator(GoOperator::RBrace)
+            | Operator(GoOperator::RBrack) => true,
+            _ => false,
         }
     }
 }
@@ -603,8 +610,18 @@ where
                 None => {
                     match self.inner.next() {
                         Some(Ok(meta)) => self.process(meta),
+                        // the last semicolon
+                        None => {
+                            return self
+                                .last
+                                .take()
+                                .filter(Self::rule_1)
+                                .as_ref()
+                                .map(Self::insert_semicolon)
+                                .map(Ok)
+                        }
                         // pass through
-                        next @ Some(Err(..)) | next @ None => {
+                        next @ Some(Err(..)) => {
                             self.poisoned = true;
                             self.last = None;
                             self.pending = None;
@@ -818,13 +835,38 @@ mod test {
             .collect::<Vec<_>>();
 
         assert_eq!(
-            vec![
+            tokens,
+            [
                 Ident("i"),
                 Operator(GoOperator::Inc),
                 Operator(GoOperator::Semicolon),
-                Ident("j")
-            ],
-            tokens
+                Ident("j"),
+                Operator(GoOperator::Semicolon),
+            ]
         );
+    }
+
+    #[test]
+    fn test_semicolon_eof() {
+        let source = "package main";
+        let tokens = necessary_semicolon(make_lexer().into_tokens(source, FILENAME.into()))
+            .into_raw()
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            tokens,
+            [
+                Keyword(GoKeyword::Package),
+                Ident("main"),
+                Operator(GoOperator::Semicolon),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_semicolon_empty() {
+        let source = "";
+        let mut tokens = necessary_semicolon(make_lexer().into_tokens(source, FILENAME.into()));
+        assert!(tokens.next().is_none());
     }
 }
