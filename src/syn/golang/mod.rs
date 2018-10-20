@@ -1,5 +1,5 @@
 use id_tree::*;
-use lang::golang::make_lexer;
+use lang::golang::*;
 use syn::bnf::Grammar;
 use syn::ebnf::{self, Syntax};
 use syn::predictive_parser::parse_tokens;
@@ -20,9 +20,11 @@ pub fn bnf(ebnf: &mut Syntax) -> Grammar {
 }
 
 pub fn build_tree(source: &str, filename: String) -> Result<Tree<String>, String> {
-    let tokens = make_lexer().into_tokens(source, filename);
     let mut syntax = ebnf();
     println!("{}", syntax);
     let grammar = bnf(&mut syntax);
+    println!("{}", grammar);
+
+    let tokens = necessary_semicolon(drop_comments(make_lexer().into_tokens(source, filename)));
     parse_tokens(&grammar, "Root", tokens)
 }

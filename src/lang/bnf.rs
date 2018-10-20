@@ -56,8 +56,18 @@ pub fn make_lexer<'a>() -> Lexer<'a, BnfToken<'a>> {
 }
 
 impl<'a> Token<'a> for BnfToken<'a> {
+    fn describe(&self) -> String {
+        match self {
+            BnfToken::Terminal(s) => format!("\"{}\"", s),
+            BnfToken::NonTerminal(s) => format!("<{}>", s),
+            BnfToken::Operator(BnfOperator::Def) => "::=".to_owned(),
+            BnfToken::Operator(BnfOperator::Alt) => "|".to_owned(),
+            BnfToken::Delimiter => ";".to_owned(),
+        }
+    }
+
     fn descriptor(&self) -> &'static str {
-        match *self {
+        match self {
             BnfToken::Terminal(..) => "Terminal",
             BnfToken::NonTerminal(..) => "NonTerminal",
             BnfToken::Operator(BnfOperator::Def) => "::=",

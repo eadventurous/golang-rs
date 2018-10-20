@@ -139,6 +139,35 @@ impl<'a, 'b> GrammarRule<'a, 'b> {
         }
         Ok(GrammarRule { name, expression })
     }
+
+    pub fn non_terminal(&self) -> BnfToken {
+        BnfToken::NonTerminal(self.name)
+    }
+
+    pub fn tokens(&self) -> Vec<BnfToken> {
+        let mut tokens = vec![
+            BnfToken::NonTerminal(self.name),
+            BnfToken::Operator(BnfOperator::Def),
+        ];
+
+        // tokens.append(&mut self.definitions.tokens());
+        {
+            let mut first = true;
+            for definition in self.expression.iter() {
+                if !first {
+                    tokens.push(BnfToken::Operator(BnfOperator::Alt));
+                }
+                first = false;
+
+                // tokens.append(&mut definition.tokens());
+                for symbol in definition.iter() {
+                    tokens.push(symbol.token());
+                }
+            }
+        }
+
+        tokens
+    }
 }
 
 #[derive(Debug)]
@@ -264,6 +293,42 @@ impl<'a, 'b> Grammar<'a, 'b> {
             }
         }
         terminals
+    }
+}
+
+mod impls {
+    use super::*;
+    use std::fmt::{Display, Formatter, Result};
+    use lex::Token;
+
+    impl<'a> GrammarSymbol<'a> {
+        pub fn token(&self) -> BnfToken {
+            match self {
+                Terminal(s) => BnfToken::Terminal(s),
+                NonTerminal(s) => BnfToken::NonTerminal(s),
+            }
+        }
+    }
+
+    impl<'a, 'b> Display for Grammar<'a, 'b> {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            writeln!(f, "BNF Syntax rules:")?;
+            for rule in self.rules.iter() {
+                writeln!(f, "{}", rule)?;
+            }
+            Ok(())
+        }
+    }
+
+    impl<'a, 'b> Display for GrammarRule<'a, 'b> {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            let mut tokens = self.tokens().into_iter();
+            write!(f, "{}", tokens.next().unwrap().describe())?;
+            for t in tokens {
+                write!(f, " {}", t.describe())?;
+            }
+            Ok(())
+        }
     }
 }
 

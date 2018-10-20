@@ -115,20 +115,24 @@ where
         .insert(Node::new(root_symbol.to_str()), AsRoot)
         .map_err(|e| format!("{}", e))?;
 
+    // Iterator<Item=Result<(&'static str, Option<T>), ::lex::Error<::lex::Bytes>>>
     let mut iter = tokens
-        .map(|t| {
-            let token = t.unwrap().token;
-            (token.descriptor(), Some(token))
-        }).into_iter()
-        .chain(::std::iter::once(("$", None)));
+        .map(|result| {
+            result
+                .map(|meta| meta.token)
+                .map(|token| (token.descriptor(), Some(token)))
+        }).chain(::std::iter::once(Ok(("$", None))));
 
     let mut stack: Vec<(GrammarSymbol, NodeId)> =
         vec![(Terminal("$"), root_id.clone()), (root_symbol, root_id)];
 
     let mut i = 1;
-    let mut input = iter.next().unwrap(); // Never empty. At least `chain` provides one "$" string.
+    // input: (descriptor, Optional<Token>)
+    let mut input = iter.next().unwrap() // Never empty. At least `chain` provides one "$" string.
+        .map_err(|e| format!("Lexer error: {}", e))?;
 
     // same as `while !stack.is_empty() { let (..) = stack.last().unwrap(); ... }`
+    // last_symbol: GrammarSymbol
     while let Some((last_symbol, last_node_id)) = stack.last().cloned() {
         //println!("stack: {:?}, input: {}", stack, input);
         match last_symbol {
@@ -141,28 +145,30 @@ where
 
                 stack.pop().ok_or_else(|| "Empty stack!".to_string())?;
                 if !stack.is_empty() {
-                    input = iter.next().ok_or_else(|| "No more tokens!".to_string())?;
+                    input = iter
+                        .next()
+                        .ok_or_else(|| "No more tokens!".to_string())?
+                        .map_err(|e| format!("Lexer error: {}", e))?;
                     i += 1;
                 }
             }
-            Terminal(s) => Err(format!(
-                "Expected {:?}, got {} at token number {}",
-                last_symbol, s, i
+            Terminal(_s) => Err(format!(
+                "Expected terminal {:?}, got {:?} at index {}.",
+                last_symbol, input.1, i,
             ))?,
-            _ => {
+            NonTerminal(_s) => {
                 let i = *symbol_map
                     .get(&last_symbol)
-                    .ok_or_else(|| format!("Non-terminal {:?} not found!", last_symbol))?;
+                    .ok_or_else(|| format!("Unexpected non-terminal {:?}.", last_symbol))?;
                 let j = *symbol_map
                     .get(&Terminal(input.0))
-                    .ok_or_else(|| format!("Terminal {:?} not found!", input))?;
+                    .ok_or_else(|| format!("Unexpected terminal {:?}.", input.0))?;
                 let prod = table[[i, j]].as_ref().ok_or_else(|| {
                     format!(
-                        "No grammar rule for {:?} given {} at token number {}",
-                        last_symbol, input.0, i
+                        "No grammar rule for {:?} given token {:?} at index {}.",
+                        last_symbol, input.1, i
                     )
                 })?;
-                //println!("{:?}", prod);
 
                 stack.pop().ok_or_else(|| "Empty stack!".to_string())?;
 
