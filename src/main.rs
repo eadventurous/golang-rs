@@ -36,13 +36,11 @@ fn read(now_what: &str) -> String {
 
 fn main() {
     let source = read("Go code");
-    let tree = syn::golang::build_tree(&source, "<stdin>".into());
-    match tree {
-        Ok(tree) => println!("{}", tree_util::TreeFmt(&tree)),
-        Err(e) => println!("{}", e),
-    }
+    let _ = syn::golang::build_tree(&source, "<stdin>".into(), true);
 }
 
+
+#[cfg(none)]
 fn main_2() {
     const FILENAME: &str = "<stdin>";
 

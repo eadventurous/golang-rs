@@ -3,6 +3,7 @@ use lang::golang::*;
 use syn::bnf::Grammar;
 use syn::ebnf::{self, Syntax};
 use syn::predictive_parser::parse_tokens;
+use tree_util::*;
 
 pub fn ebnf() -> Syntax {
     let source = include_str!("golang.bnf");
@@ -19,12 +20,39 @@ pub fn bnf(ebnf: &mut Syntax) -> Grammar {
     ebnf.ebnf_to_bnf(ebnf::Recursion::Right)
 }
 
-pub fn build_tree(source: &str, filename: String) -> Result<Tree<String>, String> {
+pub fn build_tree(source: &str, filename: String, verbose: bool) -> Result<Tree<String>, String> {
     let mut syntax = ebnf();
-    println!("{}", syntax);
+    if verbose {
+        println!("{}", syntax);
+    }
+
     let grammar = bnf(&mut syntax);
-    println!("{}", grammar);
+    if verbose {
+        println!("{}", grammar);
+    }
 
     let tokens = necessary_semicolon(drop_comments(make_lexer().into_tokens(source, filename)));
-    parse_tokens(&grammar, "Root", tokens)
+    let tree = parse_tokens(&grammar, "Root", tokens);
+    if verbose {
+        match tree {
+            Ok(ref tree) => println!("{}", TreeFmt(tree)),
+            Err(ref e) => println!("{}", e),
+        }
+    }
+    tree
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const FILENAME: &str = "test.go";
+
+    #[test]
+    fn test_empty() {
+        let source = "";
+        let tree = build_tree(source, FILENAME.into(), false);
+        assert!(tree.is_err());
+    }
 }
