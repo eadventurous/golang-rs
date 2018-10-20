@@ -15,3 +15,6 @@ import (
     "implicit"
     "semicolon"
 )
+
+// underscore
+import _ "lib/math"
