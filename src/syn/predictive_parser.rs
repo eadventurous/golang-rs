@@ -32,7 +32,7 @@ use super::bnf::*;
 use id_tree::InsertBehavior::*;
 use id_tree::*;
 #[allow(unused)]
-use lex::{MetaIter, MetaResult, Token, TokensExt};
+use lex::{ErrorBytes, MetaIter, MetaResult, SimpleErrorBytes, Token, TokenMeta, TokensExt};
 use ndarray::Array2;
 use std::collections::HashMap;
 
@@ -115,21 +115,31 @@ where
         .insert(Node::new(root_symbol.to_str()), AsRoot)
         .map_err(|e| format!("{}", e))?;
 
-    // Iterator<Item=Result<(&'static str, Option<T>), ::lex::Error<::lex::Bytes>>>
+    // Iterator<Item=Result<(descriptor, Option<Meta>), ErrorBytes>>
     let mut iter = tokens
-        .map(|result| {
-            result
-                .map(|meta| meta.token)
-                .map(|token| (token.descriptor(), Some(token)))
-        }).chain(::std::iter::once(Ok(("$", None))));
+        .map(|result| result.map(|meta| (meta.token.descriptor(), Some(meta))))
+        .chain(::std::iter::once(Ok(("$", None))));
 
     let mut stack: Vec<(GrammarSymbol, NodeId)> =
         vec![(Terminal("$"), root_id.clone()), (root_symbol, root_id)];
 
-    let mut i = 1;
-    // input: (descriptor, Optional<Token>)
+    // error stub
+    let err = ErrorBytes::default()
+        .filename("<TODO:FILENAME>".into())
+        .source("<TODO:SOURCE>");
+    fn map_lexer_error(e: ErrorBytes) -> String {
+        format!("Lexer error: {}", e)
+    }
+    let span_and_symbol = |input: (_, Option<TokenMeta<_>>)| {
+        input
+            .1
+            .map(|meta| (meta.span, Some(meta.token)))
+            .unwrap_or_default()
+    };
+
+    // input: (descriptor, Optional<Meta>)
     let mut input = iter.next().unwrap() // Never empty. At least `chain` provides one "$" string.
-        .map_err(|e| format!("Lexer error: {}", e))?;
+        .map_err(map_lexer_error)?;
 
     // same as `while !stack.is_empty() { let (..) = stack.last().unwrap(); ... }`
     // last_symbol: GrammarSymbol
@@ -137,7 +147,7 @@ where
         //println!("stack: {:?}, input: {}", stack, input);
         match last_symbol {
             Terminal(s) if s == input.0 => {
-                if let Some(token) = &input.1 {
+                if let (_, Some(TokenMeta { ref token, .. })) = &input {
                     tree.get_mut(&last_node_id)
                         .unwrap()
                         .replace_data(token.describe());
@@ -147,15 +157,18 @@ where
                 if !stack.is_empty() {
                     input = iter
                         .next()
-                        .ok_or_else(|| "No more tokens!".to_string())?
-                        .map_err(|e| format!("Lexer error: {}", e))?;
-                    i += 1;
+                        .ok_or_else(|| "Unexpected EOF!".to_string())?
+                        .map_err(map_lexer_error)?;
                 }
             }
-            Terminal(_s) => Err(format!(
-                "Expected terminal {:?}, got {:?} at index {}.",
-                last_symbol, input.1, i,
-            ))?,
+            Terminal(_s) => {
+                let (span, symbol) = span_and_symbol(input);
+                let err = err // no source and filename at the moment
+                    .span(span) // what if span is empty?
+                    .description(Some(format!("Expected terminal {:?}, got {:?}.", last_symbol, symbol)));
+                // TODO: return Err(err)
+                return Err(format!("{}", err));
+            }
             NonTerminal(_s) => {
                 let i = *symbol_map
                     .get(&last_symbol)
@@ -163,12 +176,18 @@ where
                 let j = *symbol_map
                     .get(&Terminal(input.0))
                     .ok_or_else(|| format!("Unexpected terminal {:?}.", input.0))?;
-                let prod = table[[i, j]].as_ref().ok_or_else(|| {
-                    format!(
-                        "No grammar rule for {:?} given token {:?} at index {}.",
-                        last_symbol, input.1, i
-                    )
-                })?;
+                let prod = match table[[i, j]].as_ref() {
+                    Some(prod) => prod,
+                    None => {
+                        let (span, symbol) = span_and_symbol(input);
+                        let err = err.span(span).description(Some(format!(
+                            "No grammar rule for {:?} given token {:?}.",
+                            last_symbol, symbol
+                        )));
+                        // TODO: return Err(err)
+                        return Err(format!("{}", err));
+                    }
+                };
 
                 stack.pop().ok_or_else(|| "Empty stack!".to_string())?;
 

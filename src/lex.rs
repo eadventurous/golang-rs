@@ -662,7 +662,14 @@ impl<M: Metrics> Span<M> {
     /// - First item spans from `self.start.column` location up to the end of line.
     /// - Every intermediate line spans from 1st column up to (but excluding) line terminator.
     /// - Last line spans from 1st column up to `self.end.column` location.
-    pub fn lines<'a>(&self, source: &'a str) -> LinesWithSpans<'a, M> {
+    pub fn lines<'a>(&self, source: &'a str) -> Option<LinesWithSpans<'a, M>> {
+        if self.start.column == 0 {
+            return None;
+        }
+        if self.end.column == 0 {
+            return None;
+        }
+
         if self.is_multiline() {
             let first = self.start.line;
             let last = self.end.line;
@@ -674,7 +681,7 @@ impl<M: Metrics> Span<M> {
             let mut lines = source.lines().skip(first - 1).take(total);
 
             // first
-            let line = lines.next().unwrap();
+            let line = lines.next()?;
             let span = Span::<M> {
                 start: Location::from(line, self.start.column - 1),
                 end: Location::from(line, M::len(line) - 1),
@@ -683,7 +690,7 @@ impl<M: Metrics> Span<M> {
 
             // intermediates
             for _ in 0..intermediates {
-                let line = lines.next().unwrap();
+                let line = lines.next()?;
                 let span = Span::<M> {
                     start: Location::from(line, 0),
                     end: Location::from(line, M::len(line) - 1),
@@ -692,21 +699,21 @@ impl<M: Metrics> Span<M> {
             }
 
             // last
-            let line = lines.next().unwrap();
+            let line = lines.next()?;
             let span = Span::<M> {
                 start: Location::from(line, 0),
                 end: Location::from(line, self.end.column - 1),
             };
             vec.push((line, span));
 
-            vec
+            Some(vec)
         } else {
-            let line = source.lines().nth(self.start.line - 1).unwrap();
+            let line = source.lines().nth(self.start.line - 1)?;
             let span = Span::<M> {
                 start: Location::new(1, self.start.column, self.start.column - 1),
                 end: Location::new(1, self.end.column, self.end.column - 1),
             };
-            vec![(line, span)]
+            Some(vec![(line, span)])
         }
     }
 
@@ -910,26 +917,30 @@ where
     M: Metrics,
 {
     fn fmt(&self, f: &mut Formatter) -> Result<(), fmt::Error> {
-        writeln!(
-            f,
-            "Error at {}:{}:{}",
-            self.filename, self.span.start.line, self.span.start.column,
-        )?;
-        for (line, (string, span)) in self.span.lines(self.source).into_iter().enumerate() {
-            let line = line + self.span.start.line;
-            let before = if span.start.absolute == 0 {
-                0
-            } else {
-                Span::<M>::from(string, 0, span.start.absolute - 1)
-                    .slice(string)
-                    .chars()
-                    .count()
-            };
-            let slice = span.slice(string);
-            let len = slice.chars().count();
+        write!(f, "Error at {}", self.filename)?;
+        match self.span.lines(self.source) {
+            None => {
+                writeln!(f, ":<unknown location>")?;
+            }
+            Some(lines) => {
+                writeln!(f, ":{}:{}", self.span.start.line, self.span.start.column)?;
+                for (line, (string, span)) in lines.into_iter().enumerate() {
+                    let line = line + self.span.start.line;
+                    let before = if span.start.absolute == 0 {
+                        0
+                    } else {
+                        Span::<M>::from(string, 0, span.start.absolute - 1)
+                            .slice(string)
+                            .chars()
+                            .count()
+                    };
+                    let slice = span.slice(string);
+                    let len = slice.chars().count();
 
-            writeln!(f, "{: <4}| {}", line, string)?;
-            writeln!(f, "    | {}{}", " ".repeat(before), "^".repeat(len))?;
+                    writeln!(f, "{: <4}| {}", line, string)?;
+                    writeln!(f, "    | {}{}", " ".repeat(before), "^".repeat(len))?;
+                }
+            }
         }
         if let Some(ref description) = self.description {
             writeln!(f, "{}", description)?;
@@ -1163,7 +1174,7 @@ mod test {
         let slice = NUMBERS_BYTES_SPAN.slice(NUMBERS);
         assert_eq!("word\ntree\nfour\nfive to", slice);
 
-        let lines = NUMBERS_BYTES_SPAN.lines(NUMBERS);
+        let lines = NUMBERS_BYTES_SPAN.lines(NUMBERS).unwrap();
 
         assert_eq!(lines.len(), 4);
         assert_eq!(lines[0].1, Span::from("two word", 4, 7));
