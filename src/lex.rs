@@ -408,7 +408,14 @@ impl Metrics for Bytes {
     }
 
     fn slice<'a>(span: &Span<Self>, string: &'a str) -> &'a str {
-        &string[span.start.absolute..=span.end.absolute]
+        // Trim slice to ensure string bounds safety.
+        let len = Self::len(string);
+        if len == 0 {
+            return "";
+        }
+        let start = span.start.absolute.min(len - 1);
+        let end = span.end.absolute.min(len - 1);
+        &string[start..=end]
     }
 
     fn location_add(mut location: Location<Self>, s: &str) -> Location<Self> {
