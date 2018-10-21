@@ -258,7 +258,10 @@ impl<'a, 'b> Grammar<'a, 'b> {
     ///
     /// If grammar is incomplete, i.e. some non-terminals are not defined, an error is returned.
     ///
-    pub fn first<G: AsRef<[GrammarSymbol<'b>]>>(&self, symbols: G) -> Result<HashSet<&'b str>, String> {
+    pub fn first<G>(&self, symbols: G) -> Result<HashSet<&'b str>, String>
+    where
+        G: AsRef<[GrammarSymbol<'b>]>,
+    {
         self.first_production(symbols.as_ref().into_iter().cloned())
     }
 
@@ -321,10 +324,11 @@ impl<'a, 'b> Grammar<'a, 'b> {
     }
 
     pub fn get_terminals(&self) -> HashSet<GrammarSymbol> {
-        self.rules.iter()
+        self.rules
+            .iter()
             .flat_map(|rule| rule.expression.iter())
             .flat_map(|expr| expr.iter())
-            .filter(|sym| match sym { Terminal(..) => true, _ => false })
+            .filter(|sym| sym.is_terminal())
             .cloned()
             .chain(::std::iter::once(Terminal("$")))
             .collect()
@@ -338,6 +342,17 @@ mod impls {
     use std::ops::{Deref, DerefMut};
 
     impl<'a> GrammarSymbol<'a> {
+        pub fn is_terminal(&self) -> bool {
+            match self {
+                Terminal(..) => true,
+                NonTerminal(..) => false,
+            }
+        }
+
+        pub fn is_non_terminal(&self) -> bool {
+            !self.is_terminal()
+        }
+
         pub fn token(&self) -> BnfToken {
             match self {
                 Terminal(s) => BnfToken::Terminal(s),
