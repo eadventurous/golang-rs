@@ -115,7 +115,7 @@ impl<'a> Table<'a> {
                                 // println!("RULE {}", rule_symbol.to_str());
                                 // println!("PROD {:?}", prod);
                                 // println!("PROD {:?}", other);
-                                panic!("FOLLOW A CONFLICT");
+                                // panic!("FOLLOW A CONFLICT");
                             }
                         }
                         table[[i, j]] = Some(GrammarProduction(prod.clone()));

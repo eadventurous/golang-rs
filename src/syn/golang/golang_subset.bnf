@@ -4,11 +4,12 @@
 **                  Types                      **
 ************************************************/
 
+/*
 <Type>
     ::= <TypeName>
     |   <TypeLit>
-    |   "(" <Type> ")"
     ;
+*/
 /*
 // Modified from go specs to avoid FIRST/FIRST conflict
 <TypeName>
@@ -16,6 +17,7 @@
     |   <QualifiedIdent>
     ;
 */
+/*
 <TypeName>
     ::= "identifier" <QualifiedIdent>
     ;
@@ -32,9 +34,11 @@
     ::= <ArrayType'>
     |   <SliceType'>
     ;
+*/
 
 //////            Array types              //////
 
+/*
 <ArrayType>
     ::= "[" <ArrayType'>
     ;
@@ -43,20 +47,24 @@
     ;
 <ArrayLength> ::= <Expression> ;
 <ElementType> ::= <Type> ;
+*/
 
 
 //////            Slice types              //////
 
+/*
 <SliceType>
     ::= "[" <SliceType'>
     ;
 <SliceType'>
     ::= "]" <ElementType>
     ;
+*/
 
 
 //////            Struct types             //////
 
+/*
 <StructType>
     ::= "struct" "{" { <FieldDecl> ";" } "}"
     ;
@@ -70,22 +78,26 @@
     ::= [ "*" ] <TypeName>
     ;
 <Tag> ::= "string_lit" ;
+*/
 
 
 /************************************************
 **              Pointer types                  **
 ************************************************/
 
+/*
 <PointerType>
     ::= "*" <BaseType>
     ;
 <BaseType> ::= <Type> ;
+*/
 
 
 /************************************************
 **              Function types                 **
 ************************************************/
 
+/*
 <FunctionType>
     ::= "func" <Signature>
     ;
@@ -103,38 +115,44 @@
     ::= <ParameterDecl> { "," <ParameterDecl> }
     ;
 <ParameterDecl>
-    ::= [ <IdentifierList> ] [ "..." ] <Type>
+    ::= [ <IdentifierList> ] [ "..." ] // <Type>
     ;
+*/
 
 
 /************************************************
 **             Interface types                 **
 ************************************************/
 
+/*
 <InterfaceType>
     ::= "interface" "{" { <MethodSpec> ";" } "}"
     ;
 <MethodSpec>
-    ::= <MethodName> <Signature> | <InterfaceTypeName>
+    ::= <MethodName> [ <Signature> ]
     ;
-<MethodName> ::= "identifier" ;
-<InterfaceTypeName> ::= <TypeName> ;
+<MethodName> ::= "identifier" [ <TypeName> ];
+<InterfaceTypeName> ::= ;
+*/
 
 
 /************************************************
 **                 Map types                   **
 ************************************************/
 
+/*
 <MapType>
     ::= "map" "[" <KeyType> "]" <ElementType>
     ;
 <KeyType> ::= <Type> ;
+*/
 
 
 /************************************************
 **              Channel types                  **
 ************************************************/
 
+/*
 <ChannelType>
     ::= ( "chan"
         | "chan" "<-"
@@ -142,32 +160,35 @@
         )
         <ElementType>
     ;
+*/
 
 
 /************************************************
 **                  Blocks                     **
 ************************************************/
 
+/*
 <Block>
     ::= "{" <StatementList> "}"
     ;
 <StatementList>
     ::= { <Statement> ";" }
     ;
+*/
 
 /************************************************
 **           Declarations and scope            **
 ************************************************/
 
 <Declaration>
-    ::= <ConstDecl>
+    ::=/*<ConstDecl>
     |   <TypeDecl>
-    |   <VarDecl>
+    |*/ <VarDecl>
     ;
 <TopLevelDecl>
     ::= <Declaration>
-    |   <FunctionDecl>
-    |   <MethodDecl>
+//    |   <FunctionDecl>
+//    |   <MethodDecl>
     ;
 
 
@@ -175,6 +196,7 @@
 **           Constant declarations             **
 ************************************************/
 
+/*
 <ConstDecl>
     ::= "const" (       <ConstSpec>
                 | "(" { <ConstSpec> ";" } ")"
@@ -186,8 +208,10 @@
 <ConstSpec'>
     ::=        "=" <ExpressionList>
     |   <Type> "=" <ExpressionList>
-    |   /* epsilon */
+    |
+*//* epsilon *//*
     ;
+*/
 
 <IdentifierList>
     ::= "identifier" { "," "identifier" }
@@ -201,6 +225,7 @@
 **             Type declarations               **
 ************************************************/
 
+/*
 <TypeDecl>
     ::= "type" ( <TypeSpec>
                | "(" { <TypeSpec> ";" } ")" )
@@ -224,6 +249,7 @@
     ::= "identifier" <Type>
     ;
 
+*/
 
 /************************************************
 **           Variable declarations             **
@@ -234,26 +260,30 @@
               | "(" { <VarSpec> ";" } ")" )
     ;
 <VarSpec>
-    ::= <IdentifierList> (  <Type> "=" <ExpressionList>
-                         |  <Type>
-                         | "=" <ExpressionList>
-                         )
+    ::= <IdentifierList> <VarSpec'>
     ;
-
+<VarSpec'>
+    ::= /* <Type> "=" <ExpressionList>
+    |  <Type>
+    | */ "=" <ExpressionList>
+    ;
 
 /************************************************
 **        Short variable declarations          **
 ************************************************/
 
+/*
 <ShortVarDecl>
     ::= <IdentifierList> ":=" <ExpressionList>
     ;
+*/
 
 
 /************************************************
 **           Function declarations             **
 ************************************************/
 
+/*
 <FunctionDecl>
     ::= "func" <FunctionName> <Signature> [ <FunctionBody> ]
     ;
@@ -263,18 +293,21 @@
 <FunctionBody>
     ::= <Block>
     ;
+*/
 
 
 /************************************************
 **           Method declarations               **
 ************************************************/
 
+/*
 <MethodDecl>
     ::= "func" <Receiver> <MethodName> <Signature> [ <FunctionBody> ]
     ;
 <Receiver>
     ::= <Parameters>
     ;
+*/
 
 
 /************************************************
@@ -290,8 +323,8 @@
     ;
 <Literal>
     ::= <BasicLit>
-    |   <CompositeLit>
-    |   <FunctionLit>
+//    |   <CompositeLit>
+//    |   <FunctionLit>
     ;
 <BasicLit>
     ::= "int_lit"
@@ -301,8 +334,11 @@
     |   "string_lit"
     ;
 <OperandName>
-    ::= "identifier"
-    |   <QualifiedIdent>
+    ::= "identifier" <OperandName'>
+    ;
+<OperandName'>
+    ::= <QualifiedIdent'>
+    | /* epsilon */
     ;
 
 //////       Qualified identifiers         //////
@@ -311,9 +347,11 @@
 <QualifiedIdent>
     ::= <PackageName> "." "identifier"
     ;
+<QualifiedIdent'> ::= "." "identifier" ;
 
 //////       Composite literals           //////
 
+/*
 <CompositeLit>
     ::= <LiteralType> <LiteralValue>
     ;
@@ -347,16 +385,23 @@
     ::= <Expression>
     |   <LiteralValue>
     ;
+*/
 
 //////         Function literals          //////
 
+/*
 <FunctionLit>
     ::= "func" <Signature> <FunctionBody>
     ;
+*/
 
 
 //////       Primary expressions          //////
 
+<PrimaryExpr>
+    ::= <Operand>
+    ;
+/*
 <PrimaryExpr>
     ::= <Operand>
     |   <Conversion>
@@ -367,7 +412,6 @@
     |   <PrimaryExpr> <TypeAssertion>
     |   <PrimaryExpr> <Arguments>
     ;
-
 <Selector>
     ::= "." "identifier"
     ;
@@ -384,13 +428,16 @@
 <Arguments>
     ::= "(" [ ( <ExpressionList> | <Type> [ "," <ExpressionList> ] ) [ "..." ] [ "," ] ] ")"
     ;
+*/
 
 //////        Method expressions          //////
 
+/*
 <MethodExpr>
     ::= <ReceiverType> "." <MethodName>
     ;
 <ReceiverType> ::= <Type> ;
+*/
 
 
 /************************************************
@@ -398,13 +445,19 @@
 ************************************************/
 
 <Expression>
-    ::= <UnaryExpr>
-    |   <Expression> <binary_op> <Expression>
+    ::= /* <UnaryExpr>
+    |   */ <PrimaryExpr> <Expression'>
     ;
+<Expression'>
+    ::= <binary_op> <Expression>
+    | ""
+    ;
+/*
 <UnaryExpr>
     ::= <PrimaryExpr>
     |   <unary_op> <UnaryExpr>
     ;
+*/
 
 <binary_op>
     ::= "||" | "&&" | <rel_op> | <add_op> | <mul_op>
@@ -423,17 +476,20 @@
     ;
 
 //////            Conversions             //////
+/*
 <Conversion>
     ::= <Type> "(" <Expression> [ "," ] ")"
     ;
+*/
 
 
 /************************************************
 **                Statements                   **
 ************************************************/
 
+/*
 <Statement>
-    ::= <Declaration>
+    ::= // <Declaration>
 	|   <LabeledStmt>
 	|   <SimpleStmt>
 	|   <GoStmt>
@@ -442,7 +498,7 @@
 	|   <ContinueStmt>
 	|   <GotoStmt>
 	|   <FallthroughStmt>
-	|   <Block>
+	|   // <Block>
 	|   <IfStmt>
 	|   <SwitchStmt>
 	|   <SelectStmt>
@@ -458,6 +514,7 @@
     |   <Assignment>
     |   <ShortVarDecl>
     ;
+*/
 
 
 //////        Empty statements            //////
@@ -476,26 +533,33 @@
 
 //////       Expression statements        //////
 
+/*
 <ExpressionStmt> ::= <Expression> ;
+*/
 
 
 //////         Send statements            //////
 
+/*
 <SendStmt>
     ::= <Channel> "<-" <Expression>
     ;
 <Channel>
     ::= <Expression>
     ;
+*/
 
 
 //////         IncDec statements          //////
 
+/*
 <IncDecStmt> ::= <Expression> ( "++" | "--" ) ;
+*/
 
 
 //////            Assignments             //////
 
+/*
 <Assignment>
     ::= <ExpressionList> <assign_op> <ExpressionList>
     ;
@@ -506,24 +570,29 @@
     // mul_op
     |   "*=" | "/=" | "%=" | "<<=" | ">>=" | "&=" | "&^="
     ;
+*/
 
 
 //////          If statements             //////
 
+/*
 <IfStmt>
     ::= "if" [ <SimpleStmt> ";" ] <Expression> <Block> [ "else" ( <IfStmt> | <Block> ) ]
     ;
+*/
 
 
 //////         Switch statements          //////
 
+/*
 <SwitchStmt>
     ::= <ExprSwitchStmt>
-    |   <TypeSwitchStmt>
     ;
+*/
 
 // Expression switches
 
+/*
 <ExprSwitchStmt>
     ::= "switch" [ <SimpleStmt> ";" ] [ <Expression> ] "{" { <ExprCaseClause> } "}"
     ;
@@ -534,17 +603,21 @@
     ::= "case" <ExpressionList>
     |   "default"
     ;
+*/
 
 //////           For statements           //////
 
+/*
 <ForStmt>
     ::= "for" [ <Condition> | <ForClause> | <RangeClause> ] <Block>
     ;
 <Condition> ::= <Expression> ;
+*/
 
 
 //////   For statements with for clause   //////
 
+/*
 <ForClause>
     ::= [ <InitStmt> ] ";" [ <Condition> ] ";" [ <PostStmt> ]
     ;
@@ -554,24 +627,30 @@
 <PostStmt>
     ::= <SimpleStmt>
     ;
+*/
 
 //////  For statements with range clause  //////
 
+/*
 <RangeClause>
     ::= [ <ExpressionList> "="
         | <IdentifierList> ":="
         ]
         "range" <Expression>
     ;
+*/
 
 
 //////            Go statements           //////
 
+/*
 <GoStmt> ::= "go" <Expression> ;
+*/
 
 
 //////         Select statements          //////
 
+/*
 <SelectStmt>
     ::= "select" "{" { <CommClause> } "}"
     ;
@@ -589,45 +668,56 @@
         <RecvExpr>
     ;
 <RecvExpr> ::= <Expression> ;
+*/
 
 
 //////        Return statements           //////
 
+/*
 <ReturnStmt>
     ::= "return" [ <ExpressionList> ]
     ;
+*/
 
 
 //////         Break statements           //////
 
+/*
 <BreakStmt>
     ::= "break" [ <Label> ]
     ;
+*/
 
 
 //////        Continue statements         //////
 
 
+/*
 <ContinueStmt>
     ::= "continue" [ <Label> ]
     ;
+*/
 
 
 //////          Goto statements           //////
 
+/*
 <GotoStmt>
     ::= "goto" <Label>
     ;
+*/
 
 
 //////       Fallthrough statements       //////
 
+/*
 <FallthroughStmt>
     ::= "fallthrough"
     ;
 <DeferStmt>
     ::= "defer" <Expression>
     ;
+*/
 
 
 /************************************************
