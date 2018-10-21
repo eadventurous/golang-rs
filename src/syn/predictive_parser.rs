@@ -387,6 +387,8 @@ mod test {
     use super::*;
     use lang::{brainfuck, golang};
     use tree_util::*;
+    use lex::LexerBuilder;
+    use syn::ebnf;
 
     const FILENAME: &str = "test.bnf";
 
@@ -493,5 +495,77 @@ mod test {
         let input = "id + + * id";
         let tokens = lexer.into_tokens(input, FILENAME.into());
         assert!(parse_tokens(&grammar, "E", tokens).is_err());
+    }
+
+    #[test]
+    fn test_ll1_simple() {
+        let grammar = r#"
+            <S> ::= <F>
+                | "(" <S> "+" <F> ")"
+                ;
+            <F> ::= "a" ;
+        "#;
+
+        #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+        enum Tok {
+            Left,
+            Right,
+            Plus,
+            A,
+        }
+
+        impl<'a> Token<'a> for Tok {
+            fn descriptor(&self) -> &'static str {
+                match self {
+                    Tok::Left => "(",
+                    Tok::Right => ")",
+                    Tok::Plus => "+",
+                    Tok::A => "a",
+                }
+            }
+        }
+
+        let lexer = LexerBuilder::new()
+            .add(r"\(", constant!(Tok::Left))
+            .add(r"\)", constant!(Tok::Right))
+            .add(r"\+", constant!(Tok::Plus))
+            .add(r"a", constant!(Tok::A))
+            .build();
+
+        let mut ebnf = ebnf::Parser::new(grammar, "wiki/LL_parser".into())
+            .parse()
+            .unwrap();
+        let bnf = ebnf.ebnf_to_bnf(ebnf::Recursion::Right);
+
+        let _ll1 = Table::ll1(&bnf, "S").expect("Grammar is not LL(1)");
+
+        let input = "(a+a)";
+
+        let tree =
+            parse_tokens(&bnf, "S", lexer.into_tokens(input, "".into())).expect("Parser broke");
+
+        // println!("{}", TreeFmt(&tree));
+        let _ = tree;
+    }
+
+    #[test]
+    fn test_first_first_conflict() {
+        let filename = "FIRST/FIRST Conflict";
+        let grammar = r#"
+             <S> ::= <E> | <E> "a" ;
+             <E> ::= "b" | "" ;
+        "#;
+        let mut ebnf = ebnf::Parser::new(grammar, filename.into())
+            .parse()
+            .unwrap();
+        let bnf = ebnf.ebnf_to_bnf(ebnf::Recursion::Right);
+
+        let t = Table::ll1(&bnf, "S");
+        match t {
+            Err(Error::FirstFirstConflict {..}) => {
+                // ok
+            }
+            _ => panic!("Not a FIRST/FIRST conflict")
+        }
     }
 }
