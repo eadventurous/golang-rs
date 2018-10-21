@@ -258,11 +258,15 @@ impl<'a, 'b> Grammar<'a, 'b> {
     ///
     /// If grammar is incomplete, i.e. some non-terminals are not defined, an error is returned.
     ///
+    /// # Note
+    ///
+    /// Set `guard` is used internally to prevent infinite recursion of symbols cycles.
+    /// It starts as an empty `HashSet` and then fills up with each encountered non-terminal.
     pub fn first<G>(&self, symbols: G) -> Result<HashSet<&'b str>, String>
     where
         G: AsRef<[GrammarSymbol<'b>]>,
     {
-        self.first_production(symbols.as_ref().into_iter().cloned())
+        self.first_production(symbols.as_ref().into_iter().cloned(), &mut hash_set!{})
     }
 
     ///
@@ -273,19 +277,30 @@ impl<'a, 'b> Grammar<'a, 'b> {
     /// First(A) = First(f1) U ... U First(fn)
     ///     where A = f1 | ... | fn
     ///
-    pub fn first_unit(&self, symbol: GrammarSymbol<'b>) -> Result<HashSet<&'b str>, String> {
+    /// # Note
+    ///
+    /// Set `guard` is used internally to prevent infinite recursion of symbols cycles.
+    fn first_unit(
+        &self,
+        symbol: GrammarSymbol<'b>,
+        guard: &mut HashSet<&'b str>,
+    ) -> Result<HashSet<&'b str>, String> {
         Ok(if symbol.is_epsilon() {
             hash_set!{ Epsilon::epsilon() }
         } else if let Terminal(c) = symbol {
             hash_set! {c}
         } else if let NonTerminal(A) = symbol {
+            // Have we seen it before? `HashSet::insert` returns false when an item is already there.
+            if !guard.insert(A) {
+                return Ok(hash_set!());
+            }
             let A = self
                 .get_rule(A)
                 .ok_or_else(|| format!("Invalid grammar! No rule named {}", A))?;
 
             A.expression
                 .iter()
-                .map(|f| self.first_production(f.iter().cloned()))
+                .map(|f| self.first_production(f.iter().cloned(), guard))
                 .collect::<Result<Vec<HashSet<_>>, _>>()?  // early return Err
                 .into_iter()
                 .flatten() // it could've been flat_map, but Result spoiled the fun
@@ -299,16 +314,24 @@ impl<'a, 'b> Grammar<'a, 'b> {
     ///
     /// First(e1 ... em) = { First(e1) U First(e2 ... em) | if e1 ==> Λ
     ///                    { First(e1)                    | otherwise
-    pub fn first_production<I>(&self, mut A: I) -> Result<HashSet<&'b str>, String>
+    ///
+    /// # Note
+    ///
+    /// Set `guard` is used internally to prevent infinite recursion of symbols cycles.
+    fn first_production<I>(
+        &self,
+        mut A: I,
+        guard: &mut HashSet<&'b str>,
+    ) -> Result<HashSet<&'b str>, String>
     where
         I: Iterator<Item = GrammarSymbol<'b>>,
     {
         Ok(match A.next() {
             None => hash_set!{},
             Some(e) => {
-                let mut set = self.first_unit(e)?;
+                let mut set = self.first_unit(e, guard)?;
                 if set.contains(Epsilon::epsilon()) {
-                    set.extend(self.first_production(A)?);
+                    set.extend(self.first_production(A, guard)?);
                 }
                 set
             }
