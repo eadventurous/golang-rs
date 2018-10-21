@@ -48,6 +48,10 @@ impl<'a> GrammarSymbol<'a> {
     }
 }
 
+pub trait Epsilon {
+    fn epsilon() -> Self;
+}
+
 pub trait IsEpsilon {
     /// Is this an empty production symbol, epsilon?
     fn is_epsilon(&self) -> bool;
@@ -60,9 +64,21 @@ pub trait IsNotEpsilon: IsEpsilon {
     }
 }
 
+impl<'a> Epsilon for &'a str {
+    fn epsilon() -> Self {
+        ""
+    }
+}
+
+impl<'a> Epsilon for GrammarSymbol<'a> {
+    fn epsilon() -> Self {
+        Terminal("")
+    }
+}
+
 impl<'a> IsEpsilon for GrammarSymbol<'a> {
     fn is_epsilon(&self) -> bool {
-        *self == Terminal("")
+        *self == Epsilon::epsilon()
     }
 }
 
@@ -213,7 +229,7 @@ impl<'a, 'b> Grammar<'a, 'b> {
 
                         set.extend(first_beta.iter().filter(IsNotEpsilon::is_not_epsilon));
 
-                        if first_beta.contains(&"") {
+                        if first_beta.contains(Epsilon::epsilon()) {
                             has_empty = true;
                         }
                     } else {
@@ -255,19 +271,19 @@ impl<'a, 'b> Grammar<'a, 'b> {
 
                             x_set.extend(s_first.iter().filter(IsNotEpsilon::is_not_epsilon));
 
-                            if !s_first.contains(&"") {
+                            if !s_first.contains(Epsilon::epsilon()) {
                                 break;
                             }
                             count += 1;
                         }
                         //if first(Y[j]) for j in 1..k contains "empty", then add it to the first(X)
                         if count == prod.len() {
-                            x_set.insert(&"");
+                            x_set.insert(Epsilon::epsilon());
                         }
                     }
                 }
             };
-            let contains_epsilon = x_set.contains(&"");
+            let contains_epsilon = x_set.contains(Epsilon::epsilon());
             set.extend(x_set);
             if !contains_epsilon {
                 break;
@@ -360,6 +376,9 @@ mod test {
         let symbol = Terminal("");
         assert!(symbol.is_epsilon());
 
+        let symbol = GrammarSymbol::epsilon();
+        assert!(symbol.is_epsilon());
+
         let symbol = Terminal("abc");
         assert!(!symbol.is_epsilon());
 
@@ -393,7 +412,7 @@ mod test {
                 vec![
                     GrammarSymbol::Terminal("Jr."),
                     GrammarSymbol::NonTerminal("roman-numeral"),
-                    GrammarSymbol::Terminal("")
+                    GrammarSymbol::epsilon()
                 ]
             ]
         );

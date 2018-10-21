@@ -67,7 +67,7 @@ mod impls {
     use lex::{ErrorBytes, MetaResult, SimpleErrorBytes, Token, TokenMeta};
     use std::fmt::{self, Display, Formatter};
     use std::ops::{Deref, DerefMut};
-    use syn::bnf::{self, IsEpsilon};
+    use syn::bnf::{self, IsEpsilon, Epsilon};
 
     impl Syntax {
         pub fn new() -> Self {
@@ -540,7 +540,7 @@ mod impls {
                 Primary::Optional(..) | Primary::Repeated(..) | Primary::Grouped(..) => Err(()),
                 Primary::Terminal(ref t) => Ok(bnf::Terminal(t)),
                 Primary::NonTerminal(ref t) => Ok(bnf::NonTerminal(t)),
-                Primary::Epsilon => Ok(bnf::Terminal("")),
+                Primary::Epsilon => Ok(Epsilon::epsilon()),
             }
         }
     }
