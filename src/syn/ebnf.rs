@@ -1,8 +1,8 @@
 //! # EBNF syntax parser and converter
 
-use std::error::Error;
 use lang::ebnf::*;
 use lex::{MetaResult, Tokens};
+use std::error::Error;
 
 #[derive(Clone, Debug)]
 pub struct Syntax {
@@ -84,12 +84,26 @@ pub struct EbnfExpansionPass {
     pub recursion: Recursion,
 }
 
+/// A Common left-factor is "factored out" to avoid FIRST/FIRST conflicts.
+///
+/// ```
+/// A -> X | X Y Z`
+/// ```
+///
+/// becomes
+///
+/// ```bnf
+/// A -> X B
+/// B -> Y Z | ε
+/// ```
+pub struct LeftFactoringPass;
+
 mod impls {
     use super::*;
     use lex::{ErrorBytes, MetaResult, SimpleErrorBytes, Token, TokenMeta};
     use std::fmt::{self, Display, Formatter};
     use std::ops::{Deref, DerefMut};
-    use syn::bnf::{self, IsEpsilon, Epsilon};
+    use syn::bnf::{self, Epsilon, IsEpsilon};
 
     impl Syntax {
         pub fn new() -> Self {
@@ -101,7 +115,7 @@ mod impls {
 
         /// 2-in-1: `expand_ebnf` and `into_bnf` working together.
         pub fn expand_into_bnf(&mut self, recursion: Recursion) -> bnf::Grammar {
-            EbnfExpansionPass::new(recursion).pass(self);
+            EbnfExpansionPass::new(recursion).pass(self).ok();
             self.to_bnf().unwrap()
         }
 
@@ -751,6 +765,85 @@ mod impls {
             }
         }
     }
+
+    impl LeftFactoringPass {
+        pub fn new() -> Self {
+            LeftFactoringPass
+        }
+
+        /// Find longest common factor shared by a particular rule's definitions.
+        ///
+        /// Return value:
+        /// - first item is index of matched rule;
+        /// - second item is vector of definitions' indices which have common factor;
+        /// - third item is the length of common factor (in number of symbols).
+        fn find_common_factor(&self, syntax: &Syntax) -> Option<(usize, Vec<usize>, usize)> {
+            for (x, rule) in syntax.rules.iter().enumerate() {
+                match self.find_common_factor_in_rule(rule) {
+                    Some((ys, z)) => return Some((x, ys, z)),
+                    None => {}
+                }
+            }
+            None
+        }
+
+        fn find_common_factor_in_rule(&self, rule: &Rule) -> Option<(Vec<usize>, usize)> {
+            // First, find at least one common symbol for at least two definitions of the rule.
+            // Then, move onto the second symbol, and so forth, one by one.
+
+            // Primary objective is to maximize number of affected definitions.
+            // It could be achieved by generalizing and reducing length of prefix.
+            // But the secondary objective is to maximize length of prefix.
+            let mut len = 0;
+            let mut first: &Primary = &Primary::Epsilon;
+
+            // Step 1: find an initial pair.
+            'outer: for (i, left) in rule.definitions.iter().enumerate() {
+                for (j, right) in rule.definitions.iter().enumerate().skip(i + 1) {
+                    if left.is_empty() || right.is_empty() {
+                        continue;
+                    }
+
+                    if let (Some(l), Some(r)) = (left.first(), right.first()) {
+                        if l == r {
+                            len = 1;
+                            first = l;
+                            break 'outer;
+                        }
+                    }
+                }
+            }
+
+            if len == 0 {
+                return None;
+            }
+
+            let mut ys = vec![];
+            // Step 2: find all definitions with this prefix
+            ys = rule
+                .definitions
+                .iter()
+                .enumerate()
+                .filter(|(_, def)| def.first() == Some(first))
+                // .map(|(i, _)| i)
+                .collect();
+
+            // Step 3: Iterate along `ys` to find longest common prefix
+//            loop {
+//                let mut length = len;
+//                for y in ys {
+//
+//                }
+//            }
+            None
+        }
+    }
+
+    impl SyntaxPass for LeftFactoringPass {
+        fn pass(&mut self, syntax: &mut Syntax) -> Result<(), Box<Error>> {
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]
@@ -954,7 +1047,7 @@ mod tests {
 
     fn bnf(source: &str, recursion: Recursion) -> Syntax {
         let mut syntax = Parser::new(source, FILENAME.into()).parse().unwrap();
-        EbnfExpansionPass::new(recursion).pass(&mut syntax);
+        EbnfExpansionPass::new(recursion).pass(&mut syntax).ok();
         syntax
     }
 
