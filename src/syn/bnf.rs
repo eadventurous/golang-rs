@@ -41,11 +41,10 @@ pub enum GrammarSymbol<'a> {
 
 impl<'a> GrammarSymbol<'a> {
     pub fn to_str(&self) -> String {
-        let s = match self.clone() {
-            Terminal(s) => s,
-            NonTerminal(s) => s,
-        };
-        s.to_string()
+        match self {
+            Terminal(ref s) => format!("\"{}\"", s),
+            NonTerminal(ref s) => format!("<{}>", s),
+        }
     }
 }
 

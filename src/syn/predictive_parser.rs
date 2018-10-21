@@ -86,6 +86,21 @@ fn construct_table<'a>(
     (table, symbol_map)
 }
 
+pub fn parse_tokens_with_meta<'a, 'b, I, T>(
+    grammar: &Grammar,
+    root_symbol: &str,
+    tokens: I,
+    source: &'b str,
+    filename: String,
+) -> Result<Tree<String>, ErrorBytes<'b>>
+where
+    I: MetaIter<'a, T>,
+    T: Token<'a>,
+{
+    parse_tokens(grammar, root_symbol, tokens)
+        .map_err(|simple| ErrorBytes::from(simple).source(source).filename(filename))
+}
+
 /// Parse vector of string tokens according to given `grammar`.
 /// Starts from `root_symbol` which must be one of `grammar`'s non-terminals.
 ///
@@ -98,109 +113,188 @@ pub fn parse_tokens<'a, I, T>(
     grammar: &Grammar,
     root_symbol: &str,
     tokens: I,
-) -> Result<Tree<String>, String>
+) -> Result<Tree<String>, SimpleErrorBytes>
 where
     I: MetaIter<'a, T>,
     T: Token<'a>,
 {
+    // Bottom of the stack is marked with this special descriptor.
+    const BOTTOM: &str = "$";
+
     let (table, symbol_map) = construct_table(grammar, root_symbol);
 
-    //construct tree
-    let mut tree: Tree<String> = TreeBuilder::new()
-        .with_node_capacity(symbol_map.len())
-        .build();
+    // Construct a tree with node capacity equals to fourth as much as the
+    // upper bound of tokens iterator. This is because usually grammars trees
+    // have large amount of non-terminals comparing to number of terminals
+    // which they contain as leafs.
+    let capacity = 4 * tokens.size_hint().1.unwrap_or_default();
+    let mut tree: Tree<String> = TreeBuilder::new().with_node_capacity(capacity).build();
 
+    // FIXME: root may be a terminal.
+    // TODO: change function signature.
     let root_symbol = NonTerminal(root_symbol);
     let root_id: NodeId = tree
         .insert(Node::new(root_symbol.to_str()), AsRoot)
+        // Normally, this should never fail; but just to be on the safe side.
         .map_err(|e| format!("{}", e))?;
 
+    // Iterator goes over input tokens, extracts their descriptors and appends special
+    // terminal "$" at the end.
     // Iterator<Item=Result<(descriptor, Option<Meta>), ErrorBytes>>
     let mut iter = tokens
         .map(|result| result.map(|meta| (meta.token.descriptor(), Some(meta))))
-        .chain(::std::iter::once(Ok(("$", None))));
+        .chain(::std::iter::once(Ok((BOTTOM, None))));
 
+    // Stack keeps track of pending symbols and corresponding node ids in the tree.
+    // It is initialized with special terminal "$" and root symbol. Bottom terminal
+    // is paired with root node id, which
     let mut stack: Vec<(GrammarSymbol, NodeId)> =
-        vec![(Terminal("$"), root_id.clone()), (root_symbol, root_id)];
+        vec![(Terminal(BOTTOM), root_id.clone()), (root_symbol, root_id)];
 
-    // error stub
-    let err = ErrorBytes::default()
-        .filename("<TODO:FILENAME>".into())
-        .source("<TODO:SOURCE>");
-    fn map_lexer_error(e: ErrorBytes) -> String {
-        format!("Lexer error: {}", e)
+    // Never empty. At least `chain` provides one terminal "$".
+    // let input: (descriptor, Option<MetaResult>);
+    let mut input: (&str, Option<_>) = iter.next().unwrap()?;
+
+    // This macro helper triggers an error with supplied formatting and arguments,
+    // and also adds a bit of context from current input. Basically, it adds span
+    // of current input, and provides current symbol as keyword argument to the
+    // description's format arguments.
+    //
+    // It couldn't been done with `?` operator because Err value can not be
+    // constructed solely from description.
+    // It couldn't been done with closure either because compiler would recognise
+    // it as `move` semantics for `input`, even though it would have been executed
+    // only right before the return.
+    //
+    // Relevant link to the playground:
+    // https://play.rust-lang.org/?version=stable&mode=debug&edition=2015&gist=d6bb86529997d4e41e390def3540c0a0
+    macro_rules! err {
+        ( $fmt:expr, $( $arg:expr, )* ) => {{
+            let (span, symbol) = input.1
+                .map(|meta| (meta.span, Some(meta.token)))
+                .unwrap_or_default();
+            let symbol = match symbol {
+                Some(token) => format!("{}", token.describe()),
+                None => "None".into()
+            };
+            return Err(
+                SimpleErrorBytes::default()
+                    .span(span)
+                    .description(format!(
+                        concat!($fmt, "{symbol:.0}"),
+                        $( $arg, )*
+                        symbol=symbol)));
+        }};
+        // Trailing comma fix.
+        ( $fmt:expr, $( $arg:expr ),* ) => {{ err!( $fmt, $( $arg, )* ) }};
     }
-    let span_and_symbol = |input: (_, Option<TokenMeta<_>>)| {
-        input
-            .1
-            .map(|meta| (meta.span, Some(meta.token)))
-            .unwrap_or_default()
-    };
 
-    // input: (descriptor, Optional<Meta>)
-    let mut input = iter.next().unwrap() // Never empty. At least `chain` provides one "$" string.
-        .map_err(map_lexer_error)?;
+    // Analog to early-return `?` operator for `Option`s to return error with
+    // context and custom message.
+    macro_rules! try_some {
+        // Special case for empty arguments list.
+        ( $expr:expr, $fmt:expr ) => { try_some!( $expr, $fmt, ) };
+        ( $expr:expr, $fmt:expr, $( $arg:expr ),* ) => {
+            match $expr {
+                Some(x) => x,
+                None => err!( $fmt, $( $arg ),* ),
+            }
+        };
+    }
 
-    // same as `while !stack.is_empty() { let (..) = stack.last().unwrap(); ... }`
-    // last_symbol: GrammarSymbol
+    // Loop until stack is empty.
+    // let last_symbol: GrammarSymbol;
+    // let last_node_id: NodeId;
     while let Some((last_symbol, last_node_id)) = stack.last().cloned() {
-        //println!("stack: {:?}, input: {}", stack, input);
+        let descriptor = input.0;
         match last_symbol {
-            Terminal(s) if s == input.0 => {
-                if let (_, Some(TokenMeta { ref token, .. })) = &input {
+            Terminal(s) if s == descriptor => {
+                // Eventually, all grammar terminals inside the tree
+                // will be replaced by corresponding tokens' descriptions.
+                // Non-terminals will remain.
+                // FIXME: Proposal to build tree out of special enum, not expensive `String`s
+                if let (_, Some(TokenMeta { ref token, .. })) = input {
                     tree.get_mut(&last_node_id)
                         .unwrap()
                         .replace_data(token.describe());
+                } else {
+                    // Absence of token could mean only one reasonable thing:
+                    // this is the end, and descriptor is special value "$".
+                    assert_eq!(descriptor, BOTTOM);
                 }
 
-                stack.pop().ok_or_else(|| "Empty stack!".to_string())?;
+                // Done with this symbol, move on to the next.
+                // Stack MUST NOT be empty at this point, because
+                // empty stack is the exit condition for this loop.
+                try_some!(stack.pop(), "Empty stack!");
+                // If it wasn't the last expected symbol on the stack,
+                // then there MUST be more inputs.
                 if !stack.is_empty() {
-                    input = iter
-                        .next()
-                        .ok_or_else(|| "Unexpected EOF!".to_string())?
-                        .map_err(map_lexer_error)?;
+                    input = try_some!(iter.next(), "Unexpected EOF!")?;
                 }
             }
-            Terminal(_s) => {
-                let (span, symbol) = span_and_symbol(input);
-                let err = err // no source and filename at the moment
-                    .span(span) // what if span is empty?
-                    .description(format!("Expected terminal {:?}, got {:?}.", last_symbol, symbol));
-                // TODO: return Err(err)
-                return Err(format!("{}", err));
-            }
-            NonTerminal(_s) => {
-                let i = *symbol_map
-                    .get(&last_symbol)
-                    .ok_or_else(|| format!("Unexpected non-terminal {:?}.", last_symbol))?;
-                let j = *symbol_map
-                    .get(&Terminal(input.0))
-                    .ok_or_else(|| format!("Unexpected terminal {:?}.", input.0))?;
-                let prod = match table[[i, j]].as_ref() {
-                    Some(prod) => prod,
-                    None => {
-                        let (span, symbol) = span_and_symbol(input);
-                        let err = err.span(span).description(format!(
-                            "No grammar rule for {:?} given token {:?}.",
-                            last_symbol, symbol
-                        ));
-                        // TODO: return Err(err)
-                        return Err(format!("{}", err));
-                    }
-                };
+            // Not that terminal which was expected.
+            // For example, for root symbol `<X> ::= "a" "b" "c"` stack would
+            // look like `["$", "a", "b", "c"]` (with the first element on the
+            // left); so at this point `last_symbol` is `Terminal("c")` and
+            // current `input` is expected to be `Some` token with descriptor "c".
+            Terminal(..) => err!(
+                "Expected terminal {}, got {symbol}.",
+                last_symbol.token().describe(),
+            ),
+            // Replace non-terminal with its production.
+            NonTerminal(..) => {
+                // Index of stack's current symbol in the table.
+                // This must only fail if grammar is invalid.
+                let i = *try_some!(
+                    symbol_map.get(&last_symbol),
+                    "Unexpected non-terminal {}.",
+                    last_symbol.token().describe()
+                );
+                // Index of input descriptor in the table.
+                // This must only fail if grammar is invalid.
+                let j = *try_some!(
+                    symbol_map.get(&Terminal(descriptor)),
+                    "Unexpected terminal {}.",
+                    Terminal(descriptor).token().describe()
+                );
+                // Lookup production
+                // This may fail if input stream is not valid for given grammar.
+                let prod: &GrammarProduction = try_some!(
+                    table[[i, j]].as_ref(),
+                    "Unexpected input {symbol} for grammar rule {}.",
+                    last_symbol.token().describe()
+                );
+                // Production is a struct tuple of a name and a `Vec` of actual productions.
+                let prod: &Vec<GrammarSymbol> = &prod.1;
 
-                stack.pop().ok_or_else(|| "Empty stack!".to_string())?;
+                // Remove old non-terminal and insert new symbols in its place.
+                try_some!(stack.pop(), "Empty stack!");
 
+                // For every non-epsilon symbol, insert its descriptor under last node.
                 let symbols_and_ids: Vec<(GrammarSymbol, NodeId)> = prod
-                    .1
                     .iter()
+                    // Don't ever put epsilon onto grammar stack:
+                    // it is pointless and it won't match anything.
                     .filter(IsNotEpsilon::is_not_epsilon)
                     .map(|symbol| {
-                        tree.insert(Node::new(symbol.to_str()), UnderNode(&last_node_id))
-                            .map(|id| (*symbol, id))
+                        let as_str = symbol.to_str();
+                        tree.insert(Node::new(as_str), UnderNode(&last_node_id))
+                            // Normally, this should never fail; but just to be on the safe side.
                             .map_err(|e| format!("{}", e))
-                    }).collect::<Result<_, String>>()?;
+                            // Return GrammarSymbol itself and NodeId
+                            .map(|id| (*symbol, id))
+                    })
+                    // Iter<Item=Result<...>> can be collected to single Result<...>
+                    // with Ok of collected items of Err of first encountered error.
+                    .collect::<Result<_, _>>()?;
 
+                // Tree and stack insertions must be done in reverse order.
+                // Tree, when printed, should look ordered like source: first
+                // sub-rules come in front.
+                // Stack, on the other hand keeps rules which must be matched
+                // first on its top, which means for `Vec` representation they
+                // go last. Hence the reverse.
                 stack.extend(symbols_and_ids.into_iter().rev());
             }
         }
@@ -251,22 +345,22 @@ mod test {
         let tree = parse_tokens(&grammar, "E", tokens).unwrap();
 
         let expected = tree!{
-          "E" => {
-            "T" => {
-              "F" => {
+          "<E>" => {
+            "<T>" => {
+              "<F>" => {
                 "one"},
-              "T'"},
-            "E'" => {
+              "<T'>"},
+            "<E'>" => {
               "Operator(Add)",
-              "T" => {
-                "F" => {
+              "<T>" => {
+                "<F>" => {
                   "two"},
-                "T'" => {
+                "<T'>" => {
                   "Operator(Mul)"},
-                  "F" => {
+                  "<F>" => {
                     "tree"},
-                  "T'"},
-              "E'"}}
+                  "<T'>"},
+              "<E'>"}}
         };
 
         // println!("{}", TreeFmt(&tree));
@@ -291,7 +385,7 @@ mod test {
             .unwrap()
             .map(Node::data)
             .collect();
-        assert_eq!(code_children, vec!["Command", "Code"]);
+        assert_eq!(code_children, ["<Command>", "<Code>"]);
 
         let mut code_children_ids = tree.children_ids(tree.root_node_id().unwrap()).unwrap();
         let mut command_children_ids = tree

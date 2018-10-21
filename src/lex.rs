@@ -885,6 +885,15 @@ where
     }
 }
 
+impl<M> From<String> for SimpleError<M>
+where
+    M: Metrics,
+{
+    fn from(e: String) -> Self {
+        SimpleError::default().description(e)
+    }
+}
+
 impl<'a, M> SimpleError<M>
 where
     M: Metrics,
