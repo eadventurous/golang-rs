@@ -10,8 +10,8 @@ use tree_util::*;
 mod tests;
 
 pub fn ebnf() -> Syntax {
-    let source = include_str!("golang.bnf");
-    let syntax = Parser::new(source, "golang.bnf".into())
+    let source = include_str!("golang_subset.bnf");
+    let syntax = Parser::new(source, "golang_subset.bnf".into())
         .parse()
         .unwrap_or_else(|e| {
             println!("{}", e);
