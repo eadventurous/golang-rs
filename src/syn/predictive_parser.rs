@@ -53,7 +53,8 @@ pub enum Error<'a> {
 }
 
 impl<'a> Table<'a> {
-    pub fn new(grammar: &'a Grammar, start_symbol: &'a str) -> Result<Self, Error<'a>> {
+    /// Construct LL(1) table parser from given grammar.
+    pub fn ll1(grammar: &'a Grammar, start_symbol: &'a str) -> Result<Self, Error<'a>> {
         #![allow(non_snake_case)]
 
         let terminals = grammar.get_terminals();
@@ -161,7 +162,7 @@ where
     // Bottom of the stack is marked with this special descriptor.
     const BOTTOM: &str = "$";
 
-    let t = Table::new(grammar, root_symbol).map_err(|e| format!("{}", e))?;
+    let t = Table::ll1(grammar, root_symbol).map_err(|e| format!("{}", e))?;
 
     // Construct a tree with node capacity equals to fourth as much as the
     // upper bound of tokens iterator. This is because usually grammars trees
@@ -399,7 +400,7 @@ mod test {
             <F> ::= "(" <E> ")" | "id"
         "#;
         let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
-        let table = Table::new(&grammar, "E").unwrap();
+        let table = Table::ll1(&grammar, "E").unwrap();
 
         let i = table.symbol_map[&NonTerminal("E'")];
         let j = table.symbol_map[&Terminal("+")];
