@@ -1,5 +1,6 @@
 //! # EBNF syntax parser and converter
 
+use std::error::Error;
 use lang::ebnf::*;
 use lex::{MetaResult, Tokens};
 
@@ -62,6 +63,27 @@ pub struct Parser<'a> {
     filename: String,
 }
 
+/// Trait for performing optimization passes over EBNF syntax definitions.
+pub trait SyntaxPass {
+    fn pass(&mut self, syntax: &mut Syntax) -> Result<(), Box<dyn Error>>;
+}
+
+///
+/// EBNF to BNF transformation pass.
+///
+/// This process eliminates each nesting term according to three rules: see `rule_1`,
+/// `rule_2` and `rule_3` for more information. Those rules are not means to be called
+/// directly, but rather made public for educational purposes. Use `find_nesting` function
+/// to fetch parameters for them.
+///
+/// # Error type
+///
+/// This pass should never fail.
+///
+pub struct EbnfExpansionPass {
+    pub recursion: Recursion,
+}
+
 mod impls {
     use super::*;
     use lex::{ErrorBytes, MetaResult, SimpleErrorBytes, Token, TokenMeta};
@@ -79,32 +101,8 @@ mod impls {
 
         /// 2-in-1: `expand_ebnf` and `into_bnf` working together.
         pub fn ebnf_to_bnf(&mut self, recursion: Recursion) -> bnf::Grammar {
-            self.expand_ebnf(recursion);
+            EbnfExpansionPass::new(recursion).pass(self);
             self.into_bnf().unwrap()
-        }
-
-        /// EBNF to BNF transformation.
-        ///
-        /// This process eliminates each nesting term according to three rules: see `rule_1`,
-        /// `rule_2` and `rule_3` for more information. Those rules are not means to be called
-        /// directly, but rather made public for educational purposes. Use `find_nesting` function
-        /// to fetch parameters for them.
-        pub fn expand_ebnf(&mut self, recursion: Recursion) {
-            while let Some(xyz) = self.find_nested() {
-                let ref nesting = self.extract(xyz).nesting();
-                match nesting {
-                    Some(Nesting::Repeated) => {
-                        self.rule_1(xyz, recursion);
-                    }
-                    Some(Nesting::Optional) => {
-                        self.rule_2(xyz);
-                    }
-                    Some(Nesting::Grouped) => {
-                        self.rule_3(xyz);
-                    }
-                    _ => unreachable!(),
-                }
-            }
         }
 
         /// Downgrade EBNF syntax to BNF.
@@ -119,144 +117,6 @@ mod impls {
             }
 
             Ok(bnf)
-        }
-
-        /// 1. Convert every repetition `{ E }` to a fresh non-terminal `X` and add `X = eps | X ( E )`.
-        pub fn rule_1(&mut self, (x, y, z): (usize, usize, usize), recursion: Recursion) {
-            #![allow(non_snake_case)]
-            match self.extract((x, y, z)).nesting() {
-                Some(Nesting::Repeated) => {
-                    let X_index = self.add_rule();
-
-                    // wait for rust [nll] feature
-                    let list = {
-                        let mut X = self.rules[X_index].non_terminal();
-
-                        // nesting = { E }
-                        let nesting = self.extract_mut((x, y, z));
-
-                        // swap X and { E }
-                        ::std::mem::swap(&mut X, nesting);
-                        // clean up after swapping pointers
-                        let (X, mut E) = (nesting.clone(), X.into_inner().unwrap());
-
-                        // X = eps | X E
-                        DefinitionList(vec![
-                            // eps
-                            Definition(vec![Primary::Epsilon]),
-                            // X E
-                            Definition({
-                                if E.len() == 1 {
-                                    // reuse E
-                                    let mut def = E.0.into_iter().nth(0).unwrap().0;
-                                    match recursion {
-                                        Recursion::Left => {
-                                            def.insert(0, X);
-                                        }
-                                        Recursion::Right => {
-                                            def.push(X);
-                                        }
-                                    }
-                                    def
-                                } else {
-                                    match recursion {
-                                        Recursion::Left => vec![X, Primary::Grouped(E)],
-                                        Recursion::Right => vec![Primary::Grouped(E), X],
-                                    }
-                                }
-                            }),
-                        ])
-                    };
-
-                    // add rule X
-                    self.rules[X_index].definitions = list;
-                }
-                _ => unreachable!(),
-            }
-        }
-
-        /// 2. Convert every option `[ E ]` to a fresh non-terminal `X` and add `X = eps | E`.
-        /// (We can convert `X = A [ E ] B` to `X = A E B | A B`.)
-        pub fn rule_2(&mut self, (x, y, z): (usize, usize, usize)) {
-            #![allow(non_snake_case)]
-            match self.extract((x, y, z)).nesting() {
-                Some(Nesting::Optional) => {
-                    // Convert `X = A [ E ] B` to `X = A E B | A B`.
-                    // Note that definitions list of X may contain other alternatives on both sides of
-                    // definition containing optional term. For example:
-                    // X = I | A [ E ]  B  | ( J | K ) | { L }
-                    // X = I | A E B | A B | ( J | K ) | { L }
-                    // In such case, expansion must take care of preserving other context.
-
-                    // Expand `A [ E ] B` to `A E B`.
-                    // Consider cases where E introduces new "alternatives scope" (e.g. E ::= A | B)
-                    // as well as where E is defined as single `Definition`.
-
-                    // this is not actually E, but surrounding Primary::Optional [ E ]
-                    let E_outer = self.rules[x].definitions[y].remove(z);
-                    let mut E = E_outer.into_inner().unwrap();
-
-                    if E.is_empty() {
-                        // just remove it.
-                        // nothing more to do.
-                    } else if E.len() == 1 {
-                        // insert alternative with and without E back to the definitions
-
-                        // without E
-                        // - already done by removing
-
-                        // with expanded E
-                        // - optional of single definition (i.e. not a list of alternatives):
-                        //   `[ E ]` or `[ A B { C } ]`
-                        let inners = E.0.into_iter().nth(0).unwrap();
-
-                        // inflate current alternate definition
-                        let mut definition = self.rules[x].definitions[y].clone();
-                        definition.splice(z..z, inners.0);
-                        self.rules[x].definitions.insert(y, definition);
-                    } else {
-                        // multiple definitions (i.e. a list of alternatives):
-                        // `[ A | B ]`
-
-                        // Convert to fresh non-terminal `X` and add `X = eps | E`.
-                        let X_index = self.add_rule();
-
-                        // prepend eps | E
-                        E.0.insert(0, Definition(vec![Primary::Epsilon]));
-                        // set `X = eps | E`
-                        self.rules[X_index].definitions = E;
-
-                        // replace [E] with X
-                        let X = self.rules[X_index].non_terminal();
-                        self.rules[x].definitions[y].insert(z, X.clone());
-                    }
-                }
-                _ => unreachable!(),
-            }
-        }
-
-        /// 3. Convert every group `( E )` to a fresh non-terminal `X` and add `X = E`.
-        pub fn rule_3(&mut self, (x, y, z): (usize, usize, usize)) {
-            #![allow(non_snake_case)]
-            match self.extract((x, y, z)).nesting() {
-                Some(Nesting::Grouped) => {
-                    let E_outer = self.rules[x].definitions[y].remove(z);
-                    let mut E = E_outer.into_inner().unwrap();
-
-                    if E.is_empty() {
-                        // for empty ( ) just remove it
-                        // nothing more to do
-                    } else {
-                        let X_index = self.add_rule();
-                        self.rules[X_index].definitions = E;
-
-                        // insert X in place of removed ( E )
-                        let mut X = self.rules[X_index].non_terminal();
-                        self.rules[x].definitions[y].insert(z, X);
-                    }
-                }
-                _ => unreachable!(),
-            }
         }
 
         /// Shortcut for `self->rules[x]->definitions[y]->primaries[z]`. Immutable version.
@@ -726,6 +586,171 @@ mod impls {
             }
         }
     }
+
+    impl SyntaxPass for EbnfExpansionPass {
+        fn pass(&mut self, syntax: &mut Syntax) -> Result<(), Box<dyn Error>> {
+            while let Some(xyz) = syntax.find_nested() {
+                let ref nesting = syntax.extract(xyz).nesting();
+                match nesting {
+                    Some(Nesting::Repeated) => {
+                        self.rule_1(syntax, xyz);
+                    }
+                    Some(Nesting::Optional) => {
+                        self.rule_2(syntax, xyz);
+                    }
+                    Some(Nesting::Grouped) => {
+                        self.rule_3(syntax, xyz);
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            Ok(())
+        }
+    }
+
+    impl EbnfExpansionPass {
+        pub fn new(recursion: Recursion) -> Self {
+            EbnfExpansionPass { recursion }
+        }
+
+        /// 1. Convert every repetition `{ E }` to a fresh non-terminal `X` and add `X = eps | X ( E )`.
+        pub fn rule_1(&mut self, syntax: &mut Syntax, (x, y, z): (usize, usize, usize)) {
+            #![allow(non_snake_case)]
+            match syntax.extract((x, y, z)).nesting() {
+                Some(Nesting::Repeated) => {
+                    let X_index = syntax.add_rule();
+
+                    // wait for rust [nll] feature
+                    let list = {
+                        let mut X = syntax.rules[X_index].non_terminal();
+
+                        // nesting = { E }
+                        let nesting = syntax.extract_mut((x, y, z));
+
+                        // swap X and { E }
+                        ::std::mem::swap(&mut X, nesting);
+                        // clean up after swapping pointers
+                        let (X, mut E) = (nesting.clone(), X.into_inner().unwrap());
+
+                        // X = eps | X E
+                        DefinitionList(vec![
+                            // eps
+                            Definition(vec![Primary::Epsilon]),
+                            // X E
+                            Definition({
+                                if E.len() == 1 {
+                                    // reuse E
+                                    let mut def = E.0.into_iter().nth(0).unwrap().0;
+                                    match self.recursion {
+                                        Recursion::Left => {
+                                            def.insert(0, X);
+                                        }
+                                        Recursion::Right => {
+                                            def.push(X);
+                                        }
+                                    }
+                                    def
+                                } else {
+                                    match self.recursion {
+                                        Recursion::Left => vec![X, Primary::Grouped(E)],
+                                        Recursion::Right => vec![Primary::Grouped(E), X],
+                                    }
+                                }
+                            }),
+                        ])
+                    };
+
+                    // add rule X
+                    syntax.rules[X_index].definitions = list;
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        /// 2. Convert every option `[ E ]` to a fresh non-terminal `X` and add `X = eps | E`.
+        /// (We can convert `X = A [ E ] B` to `X = A E B | A B`.)
+        pub fn rule_2(&mut self, syntax: &mut Syntax, (x, y, z): (usize, usize, usize)) {
+            #![allow(non_snake_case)]
+            match syntax.extract((x, y, z)).nesting() {
+                Some(Nesting::Optional) => {
+                    // Convert `X = A [ E ] B` to `X = A E B | A B`.
+                    // Note that definitions list of X may contain other alternatives on both sides of
+                    // definition containing optional term. For example:
+                    // X = I | A [ E ]  B  | ( J | K ) | { L }
+                    // X = I | A E B | A B | ( J | K ) | { L }
+                    // In such case, expansion must take care of preserving other context.
+
+                    // Expand `A [ E ] B` to `A E B`.
+                    // Consider cases where E introduces new "alternatives scope" (e.g. E ::= A | B)
+                    // as well as where E is defined as single `Definition`.
+
+                    // this is not actually E, but surrounding Primary::Optional [ E ]
+                    let E_outer = syntax.rules[x].definitions[y].remove(z);
+                    let mut E = E_outer.into_inner().unwrap();
+
+                    if E.is_empty() {
+                        // just remove it.
+                        // nothing more to do.
+                    } else if E.len() == 1 {
+                        // insert alternative with and without E back to the definitions
+
+                        // without E
+                        // - already done by removing
+
+                        // with expanded E
+                        // - optional of single definition (i.e. not a list of alternatives):
+                        //   `[ E ]` or `[ A B { C } ]`
+                        let inners = E.0.into_iter().nth(0).unwrap();
+
+                        // inflate current alternate definition
+                        let mut definition = syntax.rules[x].definitions[y].clone();
+                        definition.splice(z..z, inners.0);
+                        syntax.rules[x].definitions.insert(y, definition);
+                    } else {
+                        // multiple definitions (i.e. a list of alternatives):
+                        // `[ A | B ]`
+
+                        // Convert to fresh non-terminal `X` and add `X = eps | E`.
+                        let X_index = syntax.add_rule();
+
+                        // prepend eps | E
+                        E.0.insert(0, Definition(vec![Primary::Epsilon]));
+                        // set `X = eps | E`
+                        syntax.rules[X_index].definitions = E;
+
+                        // replace [E] with X
+                        let X = syntax.rules[X_index].non_terminal();
+                        syntax.rules[x].definitions[y].insert(z, X.clone());
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        /// 3. Convert every group `( E )` to a fresh non-terminal `X` and add `X = E`.
+        pub fn rule_3(&mut self, syntax: &mut Syntax, (x, y, z): (usize, usize, usize)) {
+            #![allow(non_snake_case)]
+            match syntax.extract((x, y, z)).nesting() {
+                Some(Nesting::Grouped) => {
+                    let E_outer = syntax.rules[x].definitions[y].remove(z);
+                    let mut E = E_outer.into_inner().unwrap();
+
+                    if E.is_empty() {
+                        // for empty ( ) just remove it
+                        // nothing more to do
+                    } else {
+                        let X_index = syntax.add_rule();
+                        syntax.rules[X_index].definitions = E;
+
+                        // insert X in place of removed ( E )
+                        let mut X = syntax.rules[X_index].non_terminal();
+                        syntax.rules[x].definitions[y].insert(z, X);
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -929,7 +954,7 @@ mod tests {
 
     fn bnf(source: &str, recursion: Recursion) -> Syntax {
         let mut syntax = Parser::new(source, FILENAME.into()).parse().unwrap();
-        syntax.expand_ebnf(recursion);
+        EbnfExpansionPass::new(recursion).pass(&mut syntax);
         syntax
     }
 
