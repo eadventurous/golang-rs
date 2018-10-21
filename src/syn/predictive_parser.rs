@@ -45,7 +45,7 @@ pub struct Table<'a> {
 
 #[derive(Clone, Debug)]
 pub enum Error<'a> {
-    FirstSetConflict {
+    FirstFirstConflict {
         rule: GrammarSymbol<'a>,
         terminal: GrammarSymbol<'a>,
         conflict: Vec<GrammarProduction<'a>>,
@@ -82,9 +82,9 @@ impl<'a> Table<'a> {
                     // Index of terminal in table
                     let j = symbol_map[&Terminal(a)];
 
-                    // Part of table construction is error checking for first/follow set conflicts.
+                    // Part of table construction is error checking for FIRST/FIRST set conflicts.
                     if let Some(GrammarProduction(ref other)) = table[[i, j]] {
-                        return Err(Error::FirstSetConflict {
+                        return Err(Error::FirstFirstConflict {
                             rule: rule_symbol,
                             terminal: Terminal(a),
                             conflict: vec![
@@ -349,7 +349,7 @@ mod impls {
     impl<'a> Display for Error<'a> {
         fn fmt(&self, f: &mut Formatter) -> Result {
             match self {
-                Error::FirstSetConflict {
+                Error::FirstFirstConflict {
                     ref rule,
                     ref terminal,
                     ref conflict,
@@ -357,7 +357,7 @@ mod impls {
                     writeln!(f)?;
                     writeln!(
                         f,
-                        "First Set conflict for rule {} at terminal {}.",
+                        "FIRST/FIRST Conflict for rule {} at terminal {}.",
                         rule.to_str(),
                         terminal.to_str(),
                     )?;
