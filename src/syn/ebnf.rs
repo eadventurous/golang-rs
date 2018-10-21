@@ -264,19 +264,28 @@ mod impls {
         }
 
         /// Using `is_empty` is slightly smarter that simple `len() == 0` test.
-        pub fn is_empty(&self) -> bool {
+        pub fn is_epsilon(&self) -> bool {
             if self.len() == 0 {
                 // no definitions at all
                 true
-            } else if self[0].len() == 0 {
-                // one empty definition
-                true
-            } else if self[0][0] == Primary::Epsilon {
-                // one definition with epsilon
+            } else if self[0].is_epsilon() {
+                // one epsilon definition
                 true
             } else {
                 false
             }
+        }
+
+        /// Test if a definition list contains epsilon production.
+        pub fn has_epsilon(&self) -> bool {
+            self.iter().find(|def| def.is_epsilon()).is_some()
+        }
+
+        /// If a definition list contains epsilon production, remove it.
+        pub fn remove_epsilon(&mut self) {
+            self.iter().position(|def| def.is_epsilon()).map(|pos| {
+                self.remove(pos);
+            });
         }
     }
 
@@ -317,6 +326,10 @@ mod impls {
             }
 
             Ok(symbols)
+        }
+
+        pub fn is_epsilon(&self) -> bool {
+            self.is_empty() || self[0] == Primary::Epsilon
         }
     }
 
@@ -702,7 +715,7 @@ mod impls {
                     let E_outer = syntax.rules[x].definitions[y].remove(z);
                     let mut E = E_outer.into_inner().unwrap();
 
-                    if E.is_empty() {
+                    if E.is_epsilon() {
                         // just remove it.
                         // nothing more to do.
                     } else if E.len() == 1 {
@@ -749,7 +762,7 @@ mod impls {
                     let E_outer = syntax.rules[x].definitions[y].remove(z);
                     let mut E = E_outer.into_inner().unwrap();
 
-                    if E.is_empty() {
+                    if E.is_epsilon() {
                         // for empty ( ) just remove it
                         // nothing more to do
                     } else {
@@ -835,7 +848,7 @@ mod impls {
                 };
                 for (_, def) in ys.iter().skip(1) {
                     match def.iter().nth(i) {
-                        Some(other) if this == other => {},
+                        Some(other) if this == other => {}
                         _ => break 'end,
                     };
                 }
@@ -863,7 +876,6 @@ mod impls {
             // Take random definition and extract its prefix.
             let mut prefix = Definition(old_rule.definitions[ys[0]][..z].to_vec());
 
-            // TODO: Epsilon
             let idx = syntax.add_rule();
             {
                 // mut borrow scope
@@ -879,8 +891,13 @@ mod impls {
                 old_rule_factored.definitions.push(prefix);
             }
             syntax.rules[x] = old_rule_factored;
-        }
 
+            // If new rule contains epsilon
+            if syntax.rules[idx].definitions.has_epsilon() {
+                // Then it must not exist in old rule
+                syntax.rules[x].definitions.remove_epsilon();
+            }
+        }
     }
 
     impl SyntaxPass for LeftFactoringPass {
@@ -1356,6 +1373,10 @@ mod tests {
         assert_eq!(syntax.rules.len(), 1);
         LeftFactoringPass::new().pass(&mut syntax).unwrap();
 
-        println!("{}", syntax);
+        // <S> ::= "a" | "b" <X-auto-0>
+        // <X-auto-0> ::= | "a"
+        assert_eq!(syntax.rules.len(), 2);
+        assert!(!syntax.rules[0].definitions.has_epsilon());
+        assert!(syntax.rules[1].definitions.has_epsilon());
     }
 }
