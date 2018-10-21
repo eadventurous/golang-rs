@@ -20,21 +20,26 @@
     ::= "identifier" <QualifiedIdent>
     ;
 <TypeLit>
-    ::= <ArrayType>
+    ::= "[" <TypeLit'>
     |   <StructType>
     |   <PointerType>
     |   <FunctionType>
     |   <InterfaceType>
-    |   <SliceType>
     |   <MapType>
     |   <ChannelType>
     ;
-
+<TypeLit'>
+    ::= <ArrayType'>
+    |   <SliceType'>
+    ;
 
 //////            Array types              //////
 
 <ArrayType>
-    ::= "[" <ArrayLength> "]" <ElementType>
+    ::= "[" <ArrayType'>
+    ;
+<ArrayType'>
+    ::= <ArrayLength> "]" <ElementType>
     ;
 <ArrayLength> ::= <Expression> ;
 <ElementType> ::= <Type> ;
@@ -43,7 +48,10 @@
 //////            Slice types              //////
 
 <SliceType>
-    ::= "[" "]" <ElementType>
+    ::= "[" <SliceType'>
+    ;
+<SliceType'>
+    ::= "]" <ElementType>
     ;
 
 
