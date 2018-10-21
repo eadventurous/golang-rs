@@ -209,7 +209,7 @@ impl<'a, 'b> Grammar<'a, 'b> {
                     let mut has_empty = false;
 
                     if !follow_symbols.is_empty() {
-                        let first_beta = self.first(follow_symbols.to_vec());
+                        let first_beta = self.first(follow_symbols);
 
                         set.extend(first_beta.iter().filter(IsNotEpsilon::is_not_epsilon));
 
@@ -232,11 +232,11 @@ impl<'a, 'b> Grammar<'a, 'b> {
         set
     }
 
-    pub fn first(&self, tokens: Vec<GrammarSymbol<'b>>) -> HashSet<&'b str> {
+    pub fn first<'c>(&self, tokens: &[GrammarSymbol<'b>]) -> HashSet<&'b str> {
         let mut set = hash_set!{};
 
         for token in tokens {
-            let mut x_set = hash_set!{};
+            let mut x_set : HashSet<&'b str> = hash_set!{};
 
             match token {
                 Terminal(s) => {
@@ -250,8 +250,8 @@ impl<'a, 'b> Grammar<'a, 'b> {
                     for prod in rule.expression.iter() {
                         let mut count = 0;
 
-                        for symbol in prod.iter() {
-                            let s_first = self.first(vec![*symbol]);
+                        for &symbol in prod.iter() {
+                            let s_first = self.first(&[symbol]);
 
                             x_set.extend(s_first.iter().filter(IsNotEpsilon::is_not_epsilon));
 
@@ -407,9 +407,9 @@ mod test {
             <B> ::= "" | "d"
         "#;
         let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
-        assert_eq!(grammar.first(vec![NonTerminal("A")]), hash_set!["a", ""]);
+        assert_eq!(grammar.first(&[NonTerminal("A")]), hash_set!["a", ""]);
         assert_eq!(
-            grammar.first(vec![NonTerminal("S")]),
+            grammar.first(&[NonTerminal("S")]),
             hash_set!["c", "d", "a", ""]
         );
     }
@@ -423,7 +423,7 @@ mod test {
         "#;
         let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
         assert_eq!(
-            grammar.first(vec![NonTerminal("B"), NonTerminal("A")]),
+            grammar.first(&[NonTerminal("B"), NonTerminal("A")]),
             hash_set!["", "d", "a"]
         );
     }
@@ -438,8 +438,8 @@ mod test {
             <F> ::= "(" <E> ")" | "id"
         "#;
         let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
-        assert_eq!(grammar.first(vec![NonTerminal("E'")]), hash_set!["+", ""]);
-        assert_eq!(grammar.first(vec![NonTerminal("T'")]), hash_set!["*", ""]);
+        assert_eq!(grammar.first(&[NonTerminal("E'")]), hash_set!["+", ""]);
+        assert_eq!(grammar.first(&[NonTerminal("T'")]), hash_set!["*", ""]);
     }
 
     #[test]
