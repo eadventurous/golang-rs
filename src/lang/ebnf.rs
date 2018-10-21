@@ -7,11 +7,12 @@
 //! - repetitions (`{`, `}`);
 //! - options (`[`, `]`);
 //! - grouping parenthesis (`(`, `)`);
-//! - rules delimiter: a semicolon (`;`).
+//! - rules delimiter: a semicolon (`;`);
+//! - comment: everything after `//` until the end of line.
 //!
 //! Delimiter is optional after the last rule.
 pub use self::{EbnfOperator::*, EbnfToken::*, Side::*};
-use lex::{Lexer, LexerBuilder, Token};
+use lex::{Lexer, LexerBuilder, MetaIter, Token};
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub enum EbnfToken<'a> {
@@ -22,6 +23,7 @@ pub enum EbnfToken<'a> {
     Optional(Side),
     Group(Side),
     Delimiter,
+    Comment(&'a str),
 }
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Debug)]
@@ -69,6 +71,8 @@ pub fn make_lexer<'a>() -> Lexer<'a, EbnfToken<'a>> {
         .add(r"\(", constant!(Group(Start)))
         .add(r"\)", constant!(Group(End)))
         .add(r";", constant!(Delimiter))
+        .add(r"//([^\n]*)\n?", |c| Comment(c.get(1).unwrap().as_str()))
+        .add(r"(?s)/\*(.*?)\*/", |c| Comment(c.get(1).unwrap().as_str()))
         .build()
 }
 
@@ -77,6 +81,7 @@ impl<'a> Token<'a> for EbnfToken<'a> {
         match *self {
             Terminal(t) => format!("\"{}\"", t),
             NonTerminal(t) => format!("<{}>", t),
+            Comment(c) => format!("/* {} */\n", c),
             _ => match *self {
                 Operator(Def) => "::=",
                 Operator(Alt) => "|",
@@ -105,6 +110,42 @@ impl<'a> Token<'a> for EbnfToken<'a> {
             Group(Start) => "(",
             Group(End) => ")",
             Delimiter => ";",
+            Comment(_) => "Comment",
+        }
+    }
+}
+
+pub struct DropComments<I> {
+    inner: I,
+}
+
+pub fn drop_comments<'a, I>(tokens: I) -> DropComments<I>
+where
+    I: MetaIter<'a, EbnfToken<'a>>,
+{
+    DropComments { inner: tokens }
+}
+
+mod impls {
+    use super::*;
+    use lex::{MetaResult, TokenMeta};
+
+    impl<'a, I> Iterator for DropComments<I>
+    where
+        I: Iterator<Item = MetaResult<'a, EbnfToken<'a>>>,
+    {
+        type Item = MetaResult<'a, EbnfToken<'a>>;
+
+        fn next(&mut self) -> Option<<Self as Iterator>::Item> {
+            let mut next = self.inner.next();
+            while let Some(Ok(TokenMeta {
+                token: EbnfToken::Comment(_),
+                ..
+            })) = next
+            {
+                next = self.inner.next();
+            }
+            next
         }
     }
 }
@@ -115,18 +156,22 @@ mod tests {
     use lex::TokensExt;
 
     const SOURCE: &str = r#"
-        <A> ::= (<B> | {"c"}) [<D>] ;
+        <A> // x y z
+            ::= (<B> | {/**/"c"}) [<D>]
+            ;
     "#;
 
     const FILENAME: &str = "test.bnf";
 
     const TOKENS: &[EbnfToken] = &[
         NonTerminal("A"),
+        Comment(" x y z"),
         Operator(Def),
         Group(Start),
         NonTerminal("B"),
         Operator(Alt),
         Repeat(Start),
+        Comment(""),
         Terminal("c"),
         Repeat(End),
         Group(End),
@@ -144,5 +189,18 @@ mod tests {
             .collect();
 
         assert_eq!(tokens, TOKENS);
+    }
+
+    #[test]
+    fn test_drop_comments() {
+        let tokens: Vec<_> = drop_comments(make_lexer().into_tokens(SOURCE, FILENAME.into()))
+            .into_raw()
+            .collect();
+
+        let expected: Vec<_> = TOKENS.into_iter()
+            .cloned()
+            .filter(|t| ::std::mem::discriminant(t) != ::std::mem::discriminant(&Comment("")))
+            .collect();
+        assert_eq!(tokens, expected);
     }
 }

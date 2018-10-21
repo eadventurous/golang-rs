@@ -56,7 +56,7 @@ pub enum Recursion {
 }
 
 pub struct Parser<'a> {
-    tokens: ::std::iter::Peekable<Tokens<'a, EbnfToken<'a>>>,
+    tokens: ::std::iter::Peekable<DropComments<Tokens<'a, EbnfToken<'a>>>>,
     current: Option<MetaResult<'a, EbnfToken<'a>>>,
     source: &'a str,
     filename: String,
@@ -557,9 +557,8 @@ mod impls {
 
     impl<'a> Parser<'a> {
         pub fn new(source: &'a str, filename: String) -> Self {
-            let tokens = make_lexer()
-                .into_tokens(source, filename.clone())
-                .peekable();
+            let tokens =
+                drop_comments(make_lexer().into_tokens(source, filename.clone())).peekable();
             Parser {
                 tokens,
                 current: None,
@@ -668,6 +667,7 @@ mod impls {
                         Operator(Def) => {
                             Err(self.error_expected("anything but ::= operator"))?;
                         }
+                        Comment(_) => {}
                     },
                     None => {
                         match nesting {
