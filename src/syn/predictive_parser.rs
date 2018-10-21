@@ -31,8 +31,7 @@
 use super::bnf::*;
 use id_tree::InsertBehavior::*;
 use id_tree::*;
-#[allow(unused)]
-use lex::{ErrorBytes, MetaIter, MetaResult, SimpleErrorBytes, Token, TokenMeta, TokensExt};
+use lex::{ErrorBytes, MetaIter, SimpleErrorBytes, Token, TokenMeta};
 use ndarray::Array2;
 use std::collections::HashMap;
 
