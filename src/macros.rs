@@ -4,6 +4,7 @@
 #[macro_export]
 macro_rules! hash_set {
     ($($k: expr),*) => {{
+        #[allow(unused_mut)]
         let mut set = ::std::collections::hash_set::HashSet::new();
         $( set.insert($k); )*
         set
@@ -17,6 +18,7 @@ macro_rules! hash_set {
 #[macro_export]
 macro_rules! hash_map {
     ($($k: expr, $v: expr),*) => {{
+        #[allow(unused_mut)]
         let mut map = ::std::collections::hash_map::HashMap::new();
         $( map.insert($k, $v); )*
         map
@@ -105,6 +107,7 @@ macro_rules! tree {
         ::id_tree::TreeBuilder::new().with_root(Node::new($root)).build()
     }};
     ($root:expr => { $($children:tt)* }) => {{
+        #[allow(unused_mut)]
         let mut tree = tree!($root);
         {
             let root_node = tree.root_node_id().unwrap().clone();
