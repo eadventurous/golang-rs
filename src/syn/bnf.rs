@@ -28,6 +28,7 @@
 //!
 //!
 //! ```
+#![allow(non_snake_case)]
 pub use self::GrammarSymbol::*;
 use lang::bnf::{make_lexer, BnfOperator, BnfToken};
 use lex::TokensExt;
@@ -225,7 +226,7 @@ impl<'a, 'b> Grammar<'a, 'b> {
                     let mut has_empty = false;
 
                     if !follow_symbols.is_empty() {
-                        let first_beta = self.first(follow_symbols);
+                        let first_beta = self.first(follow_symbols).unwrap();
 
                         set.extend(first_beta.iter().filter(IsNotEpsilon::is_not_epsilon));
 
@@ -248,52 +249,71 @@ impl<'a, 'b> Grammar<'a, 'b> {
         set
     }
 
-    pub fn first<'c>(&self, tokens: &[GrammarSymbol<'b>]) -> HashSet<&'b str> {
-        let mut set = hash_set!{};
+    ///
+    /// FIRST set for sequence of productions.
+    ///
+    /// See `first_unit` and `first_production` for implementation details.
+    ///
+    /// # Returns
+    ///
+    /// If grammar is incomplete, i.e. some non-terminals are not defined, an error is returned.
+    ///
+    pub fn first<G: AsRef<[GrammarSymbol<'b>]>>(&self, symbols: G) -> Result<HashSet<&'b str>, String> {
+        self.first_production(symbols.as_ref().into_iter().cloned())
+    }
 
-        for token in tokens {
-            let mut x_set : HashSet<&'b str> = hash_set!{};
+    ///
+    /// FIRST set for single symbol.
+    ///
+    /// First(Λ) = {}
+    /// First("c") = {"c"}
+    /// First(A) = First(f1) U ... U First(fn)
+    ///     where A = f1 | ... | fn
+    ///
+    pub fn first_unit(&self, symbol: GrammarSymbol<'b>) -> Result<HashSet<&'b str>, String> {
+        Ok(if symbol.is_epsilon() {
+            hash_set!{ Epsilon::epsilon() }
+        } else if let Terminal(c) = symbol {
+            hash_set! {c}
+        } else if let NonTerminal(A) = symbol {
+            let A = self
+                .get_rule(A)
+                .ok_or_else(|| format!("Invalid grammar! No rule named {}", A))?;
 
-            match token {
-                Terminal(s) => {
-                    x_set.insert(s);
+            A.expression
+                .iter()
+                .map(|f| self.first_production(f.iter().cloned()))
+                .collect::<Result<Vec<HashSet<_>>, _>>()?  // early return Err
+                .into_iter()
+                .flatten() // it could've been flat_map, but Result spoiled the fun
+                .collect()
+        } else {
+            unreachable!();
+        })
+    }
+
+    /// FIRST set for sequence of productions.
+    ///
+    /// First(e1 ... em) = { First(e1) U First(e2 ... em) | if e1 ==> Λ
+    ///                    { First(e1)                    | otherwise
+    pub fn first_production<I>(&self, mut A: I) -> Result<HashSet<&'b str>, String>
+    where
+        I: Iterator<Item = GrammarSymbol<'b>>,
+    {
+        Ok(match A.next() {
+            None => hash_set!{},
+            Some(e) => {
+                let mut set = self.first_unit(e)?;
+                if set.contains(Epsilon::epsilon()) {
+                    set.extend(self.first_production(A)?);
                 }
-                NonTerminal(name) => {
-                    let rule = self
-                        .get_rule(name)
-                        .unwrap_or_else(|| panic!("Invalid grammar! No rule named {}", name));
-
-                    for prod in rule.expression.iter() {
-                        let mut count = 0;
-
-                        for &symbol in prod.iter() {
-                            let s_first = self.first(&[symbol]);
-
-                            x_set.extend(s_first.iter().filter(IsNotEpsilon::is_not_epsilon));
-
-                            if !s_first.contains(Epsilon::epsilon()) {
-                                break;
-                            }
-                            count += 1;
-                        }
-                        //if first(Y[j]) for j in 1..k contains "empty", then add it to the first(X)
-                        if count == prod.len() {
-                            x_set.insert(Epsilon::epsilon());
-                        }
-                    }
-                }
-            };
-            let contains_epsilon = x_set.contains(Epsilon::epsilon());
-            set.extend(x_set);
-            if !contains_epsilon {
-                break;
+                set
             }
-        }
-        set
+        })
     }
 
     pub fn get_rule(&self, name: &str) -> Option<&GrammarRule<'a, 'b>> {
-        self.rules.iter().filter(|r| r.name == name).next()
+        self.rules.iter().find(|r| r.name == name)
     }
 
     pub fn get_non_terminals(&self) -> HashSet<GrammarSymbol> {
@@ -301,17 +321,13 @@ impl<'a, 'b> Grammar<'a, 'b> {
     }
 
     pub fn get_terminals(&self) -> HashSet<GrammarSymbol> {
-        let mut terminals: HashSet<GrammarSymbol> = hash_set!(Terminal("$"));
-        for rule in self.rules.iter() {
-            for prod in rule.expression.iter() {
-                for sym in prod.iter() {
-                    if let Terminal(_) = sym {
-                        terminals.insert(sym.clone());
-                    }
-                }
-            }
-        }
-        terminals
+        self.rules.iter()
+            .flat_map(|rule| rule.expression.iter())
+            .flat_map(|expr| expr.iter())
+            .filter(|sym| match sym { Terminal(..) => true, _ => false })
+            .cloned()
+            .chain(::std::iter::once(Terminal("$")))
+            .collect()
     }
 }
 
@@ -357,12 +373,12 @@ mod impls {
             &self.0
         }
     }
+
     impl<'a> DerefMut for GrammarProduction<'a> {
         fn deref_mut(&mut self) -> &mut <Self as Deref>::Target {
             &mut self.0
         }
     }
-
 }
 
 #[cfg(test)]
@@ -426,9 +442,12 @@ mod test {
             <B> ::= "" | "d"
         "#;
         let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
-        assert_eq!(grammar.first(&[NonTerminal("A")]), hash_set!["a", ""]);
         assert_eq!(
-            grammar.first(&[NonTerminal("S")]),
+            grammar.first(&[NonTerminal("A")]).unwrap(),
+            hash_set!["a", ""]
+        );
+        assert_eq!(
+            grammar.first(&[NonTerminal("S")]).unwrap(),
             hash_set!["c", "d", "a", ""]
         );
     }
@@ -442,7 +461,9 @@ mod test {
         "#;
         let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
         assert_eq!(
-            grammar.first(&[NonTerminal("B"), NonTerminal("A")]),
+            grammar
+                .first(&[NonTerminal("B"), NonTerminal("A")])
+                .unwrap(),
             hash_set!["", "d", "a"]
         );
     }
@@ -457,8 +478,14 @@ mod test {
             <F> ::= "(" <E> ")" | "id"
         "#;
         let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
-        assert_eq!(grammar.first(&[NonTerminal("E'")]), hash_set!["+", ""]);
-        assert_eq!(grammar.first(&[NonTerminal("T'")]), hash_set!["*", ""]);
+        assert_eq!(
+            grammar.first(&[NonTerminal("E'")]).unwrap(),
+            hash_set!["+", ""]
+        );
+        assert_eq!(
+            grammar.first(&[NonTerminal("T'")]).unwrap(),
+            hash_set!["*", ""]
+        );
     }
 
     #[test]

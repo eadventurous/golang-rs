@@ -77,7 +77,7 @@ impl<'a> Table<'a> {
             let i = symbol_map[&rule_symbol];
 
             for prod in rule.expression.iter() {
-                let first_A = grammar.first(&prod);
+                let first_A = grammar.first(&prod).unwrap();
                 for &a in first_A.iter().filter(IsNotEpsilon::is_not_epsilon) {
                     // Index of terminal in table
                     let j = symbol_map[&Terminal(a)];
