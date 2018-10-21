@@ -213,7 +213,7 @@ impl<'a, 'b> Grammar<'a, 'b> {
     }
 
     pub fn follow(&self, token: GrammarSymbol, start_symbol: GrammarSymbol) -> HashSet<&'b str> {
-        let mut set = hash_set!();
+        let mut set: HashSet<_> = hash_set!();
 
         if token == start_symbol {
             set.insert("$");
@@ -239,9 +239,7 @@ impl<'a, 'b> Grammar<'a, 'b> {
 
                     if has_empty && (NonTerminal(rule.name) != token) {
                         let follow_a = self.follow(NonTerminal(rule.name), start_symbol);
-                        for e in follow_a.iter() {
-                            set.insert(e);
-                        }
+                        set.extend(follow_a.into_iter());
                     }
                 }
             }
