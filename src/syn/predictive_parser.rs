@@ -36,54 +36,95 @@ use lex::{ErrorBytes, MetaIter, MetaResult, SimpleErrorBytes, Token, TokenMeta, 
 use ndarray::Array2;
 use std::collections::HashMap;
 
-fn construct_table<'a>(
-    grammar: &'a Grammar,
-    start_symbol: &'a str,
-) -> (
-    Array2<Option<GrammarProduction<'a>>>,
-    HashMap<GrammarSymbol<'a>, usize>,
-) {
-    let terminals = grammar.get_terminals();
-    let terminals_len = terminals.len();
-    let non_terminals = grammar.get_non_terminals();
-    let non_terminals_len = non_terminals.len();
+/// Parsing table: array of productions and its accompanying symbol map.
+struct Table<'a> {
+    table: Array2<Option<GrammarProduction<'a>>>,
+    /// Symbol map for both terminals and non-terminals
+    /// maps symbols onto their indices in `table` array.
+    symbol_map: HashMap<GrammarSymbol<'a>, usize>,
+}
 
-    let mut symbol_map = hash_map!{};
+#[derive(Clone, Debug)]
+pub enum Error<'a> {
+    FirstSetConflict {
+        rule: GrammarSymbol<'a>,
+        terminal: GrammarSymbol<'a>,
+        conflict: Vec<GrammarProduction<'a>>,
+    },
+}
 
-    // map terminals and non-terminals onto their indices
-    symbol_map.extend(terminals.into_iter().enumerate().map(|(i, t)| (t, i)));
+impl<'a> Table<'a> {
+    pub fn new(grammar: &'a Grammar, start_symbol: &'a str) -> Result<Self, Error<'a>> {
+        #![allow(non_snake_case)]
 
-    symbol_map.extend(non_terminals.into_iter().enumerate().map(|(i, t)| (t, i)));
+        let terminals = grammar.get_terminals();
+        let terminals_len = terminals.len();
+        let non_terminals = grammar.get_non_terminals();
+        let non_terminals_len = non_terminals.len();
 
-    let mut table = Array2::from_elem((non_terminals_len, terminals_len), None);
+        let mut symbol_map = hash_map!{};
 
-    for rule in grammar.rules.iter() {
-        for prod in rule.expression.iter() {
-            #[allow(non_snake_case)]
-            let first_A = grammar.first(prod.clone());
-            for &a in first_A.iter().filter(IsNotEpsilon::is_not_epsilon) {
-                let i = symbol_map[&NonTerminal(rule.name)];
-                let j = symbol_map[&Terminal(a)];
-                table[[i, j]] = Some(GrammarProduction(NonTerminal(rule.name), prod.clone()));
-            }
-            if first_A.contains(&"") {
-                #[allow(non_snake_case)]
-                let follow_A = grammar.follow(NonTerminal(rule.name), NonTerminal(start_symbol));
-                let i = symbol_map[&NonTerminal(rule.name)];
+        // map terminals and non-terminals onto their indices
+        symbol_map.extend(terminals.into_iter().enumerate().map(|(i, t)| (t, i)));
 
-                if follow_A.contains(&"$") {
-                    let j = symbol_map[&Terminal("$")];
-                    table[[i, j]] = Some(GrammarProduction(NonTerminal(rule.name), prod.clone()));
+        symbol_map.extend(non_terminals.into_iter().enumerate().map(|(i, t)| (t, i)));
+
+        let mut table = Array2::from_elem((non_terminals_len, terminals_len), None);
+
+        for rule in grammar.rules.iter() {
+            let rule_symbol = rule.symbol();
+            // Index of non-terminal in table
+            let i = symbol_map[&rule_symbol];
+
+            for prod in rule.expression.iter() {
+                let first_A = grammar.first(prod.clone());
+                for &a in first_A.iter().filter(IsNotEpsilon::is_not_epsilon) {
+                    // Index of terminal in table
+                    let j = symbol_map[&Terminal(a)];
+
+                    // Part of table construction is error checking for first/follow set conflicts.
+                    if let Some(GrammarProduction(ref other)) = table[[i, j]] {
+                        return Err(Error::FirstSetConflict {
+                            rule: rule_symbol,
+                            terminal: Terminal(a),
+                            conflict: vec![
+                                GrammarProduction(prod.clone()),
+                                GrammarProduction(other.clone()),
+                            ],
+                        });
+                    }
+                    table[[i, j]] = Some(GrammarProduction(prod.clone()));
                 }
+                if first_A.contains(&"") {
+                    let follow_A = grammar.follow(rule_symbol, NonTerminal(start_symbol));
 
-                for &b in follow_A.iter().filter(IsNotEpsilon::is_not_epsilon) {
-                    let j = symbol_map[&Terminal(b)];
-                    table[[i, j]] = Some(GrammarProduction(NonTerminal(rule.name), prod.clone()));
+                    if follow_A.contains(&"$") {
+                        let j = symbol_map[&Terminal("$")];
+                        if let Some(GrammarProduction(ref _other)) = table[[i, j]] {
+                            // TODO
+                            panic!("FOLLOW $ CONFLICT");
+                        }
+                        table[[i, j]] = Some(GrammarProduction(prod.clone()));
+                    }
+
+                    for &b in follow_A.iter().filter(IsNotEpsilon::is_not_epsilon) {
+                        let j = symbol_map[&Terminal(b)];
+                        if let Some(GrammarProduction(ref other)) = table[[i, j]] {
+                            if prod != other {
+                                // TODO
+                                // println!("RULE {}", rule_symbol.to_str());
+                                // println!("PROD {:?}", prod);
+                                // println!("PROD {:?}", other);
+                                panic!("FOLLOW A CONFLICT");
+                            }
+                        }
+                        table[[i, j]] = Some(GrammarProduction(prod.clone()));
+                    }
                 }
             }
         }
+        Ok(Table { table, symbol_map })
     }
-    (table, symbol_map)
 }
 
 pub fn parse_tokens_with_meta<'a, 'b, I, T>(
@@ -121,7 +162,7 @@ where
     // Bottom of the stack is marked with this special descriptor.
     const BOTTOM: &str = "$";
 
-    let (table, symbol_map) = construct_table(grammar, root_symbol);
+    let t = Table::new(grammar, root_symbol).map_err(|e| format!("{}", e))?;
 
     // Construct a tree with node capacity equals to fourth as much as the
     // upper bound of tokens iterator. This is because usually grammars trees
@@ -247,26 +288,24 @@ where
                 // Index of stack's current symbol in the table.
                 // This must only fail if grammar is invalid.
                 let i = *try_some!(
-                    symbol_map.get(&last_symbol),
+                    t.symbol_map.get(&last_symbol),
                     "Unexpected non-terminal {}.",
                     last_symbol.token().describe()
                 );
                 // Index of input descriptor in the table.
                 // This must only fail if grammar is invalid.
                 let j = *try_some!(
-                    symbol_map.get(&Terminal(descriptor)),
+                    t.symbol_map.get(&Terminal(descriptor)),
                     "Unexpected terminal {}.",
                     Terminal(descriptor).token().describe()
                 );
                 // Lookup production
                 // This may fail if input stream is not valid for given grammar.
                 let prod: &GrammarProduction = try_some!(
-                    table[[i, j]].as_ref(),
+                    t.table[[i, j]].as_ref(),
                     "Unexpected input {symbol} for grammar rule {}.",
                     last_symbol.token().describe()
                 );
-                // Production is a struct tuple of a name and a `Vec` of actual productions.
-                let prod: &Vec<GrammarSymbol> = &prod.1;
 
                 // Remove old non-terminal and insert new symbols in its place.
                 try_some!(stack.pop(), "Empty stack!");
@@ -302,6 +341,47 @@ where
     Ok(tree)
 }
 
+mod impls {
+    use super::*;
+    use std::error::Error as StdError;
+    use std::fmt::{Display, Formatter, Result};
+
+    impl<'a> Display for Error<'a> {
+        fn fmt(&self, f: &mut Formatter) -> Result {
+            match self {
+                Error::FirstSetConflict {
+                    ref rule,
+                    ref terminal,
+                    ref conflict,
+                } => {
+                    writeln!(f)?;
+                    writeln!(
+                        f,
+                        "First Set conflict for rule {} at terminal {}.",
+                        rule.to_str(),
+                        terminal.to_str(),
+                    )?;
+                    writeln!(f)?;
+                    writeln!(f, "Note: conflicting productions are:")?;
+
+                    for production in conflict {
+                        let s = production
+                            .iter()
+                            .map(GrammarSymbol::to_str)
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        writeln!(f, "\t{}", s)?;
+                    }
+                }
+            }
+            Ok(())
+        }
+    }
+
+    // Just to be cool.
+    impl<'a> StdError for Error<'a> {}
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -320,12 +400,13 @@ mod test {
             <F> ::= "(" <E> ")" | "id"
         "#;
         let grammar = Grammar::from_str(source, FILENAME.into()).unwrap();
-        let (table, symbol_map) = construct_table(&grammar, "E");
-        let i = symbol_map[&NonTerminal("E'")];
-        let j = symbol_map[&Terminal("+")];
-        let expected = vec![Terminal("+"), NonTerminal("T"), NonTerminal("E'")];
-        if let Some(ref prod) = table[[i, j]] {
-            assert_eq!(prod.1, expected);
+        let table = Table::new(&grammar, "E").unwrap();
+
+        let i = table.symbol_map[&NonTerminal("E'")];
+        let j = table.symbol_map[&Terminal("+")];
+        let expected = GrammarProduction(vec![Terminal("+"), NonTerminal("T"), NonTerminal("E'")]);
+        if let Some(ref prod) = table.table[[i, j]] {
+            assert_eq!(*prod, expected);
         }
     }
 

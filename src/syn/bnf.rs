@@ -83,8 +83,8 @@ where
 
 impl<T> IsNotEpsilon for T where T: IsEpsilon {}
 
-#[derive(Clone, Debug)]
-pub struct GrammarProduction<'a>(pub GrammarSymbol<'a>, pub Vec<GrammarSymbol<'a>>);
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GrammarProduction<'a>(pub Vec<GrammarSymbol<'a>>);
 
 #[derive(Debug)]
 pub struct GrammarRule<'a, 'b> {
@@ -139,8 +139,12 @@ impl<'a, 'b> GrammarRule<'a, 'b> {
         Ok(GrammarRule { name, expression })
     }
 
-    pub fn non_terminal(&self) -> BnfToken {
+    pub fn token(&self) -> BnfToken {
         BnfToken::NonTerminal(self.name)
+    }
+
+    pub fn symbol(&self) -> GrammarSymbol {
+        GrammarSymbol::NonTerminal(self.name)
     }
 
     pub fn tokens(&self) -> Vec<BnfToken> {
@@ -299,6 +303,7 @@ mod impls {
     use super::*;
     use lex::Token;
     use std::fmt::{Display, Formatter, Result};
+    use std::ops::{Deref, DerefMut};
 
     impl<'a> GrammarSymbol<'a> {
         pub fn token(&self) -> BnfToken {
@@ -329,6 +334,19 @@ mod impls {
             Ok(())
         }
     }
+
+    impl<'a> Deref for GrammarProduction<'a> {
+        type Target = Vec<GrammarSymbol<'a>>;
+        fn deref(&self) -> &<Self as Deref>::Target {
+            &self.0
+        }
+    }
+    impl<'a> DerefMut for GrammarProduction<'a> {
+        fn deref_mut(&mut self) -> &mut <Self as Deref>::Target {
+            &mut self.0
+        }
+    }
+
 }
 
 #[cfg(test)]
