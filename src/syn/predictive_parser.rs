@@ -37,7 +37,7 @@ use ndarray::Array2;
 use std::collections::HashMap;
 
 /// Parsing table: array of productions and its accompanying symbol map.
-struct Table<'a> {
+pub struct Table<'a> {
     table: Array2<Option<GrammarProduction<'a>>>,
     /// Symbol map for both terminals and non-terminals
     /// maps symbols onto their indices in `table` array.
