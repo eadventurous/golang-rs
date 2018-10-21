@@ -2,7 +2,7 @@ use id_tree::*;
 use lang::golang::*;
 use lex::ErrorBytes;
 use syn::bnf::Grammar;
-use syn::ebnf::{self, Syntax};
+use syn::ebnf::*;
 use syn::predictive_parser::*;
 use tree_util::*;
 
@@ -11,7 +11,7 @@ mod tests;
 
 pub fn ebnf() -> Syntax {
     let source = include_str!("golang.bnf");
-    let syntax = ebnf::Parser::new(source, "golang.bnf".into())
+    let syntax = Parser::new(source, "golang.bnf".into())
         .parse()
         .unwrap_or_else(|e| {
             println!("{}", e);
@@ -21,7 +21,9 @@ pub fn ebnf() -> Syntax {
 }
 
 pub fn bnf(ebnf: &mut Syntax) -> Grammar {
-    ebnf.expand_into_bnf(ebnf::Recursion::Right)
+    EbnfExpansionPass::new(Recursion::Right).pass(ebnf).ok();
+    LeftFactoringPass::new().pass(ebnf).ok();
+    ebnf.to_bnf().unwrap()
 }
 
 pub fn build_tree(

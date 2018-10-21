@@ -65,14 +65,12 @@ fn print_tree() {
         .into_iter()
         .map(|filename| base().join("ok").join(filename))
     {
-        load_tree_from(&file, true, |tree| {
-            match tree {
-                Ok(tree) => {
-                    println!("{:?}", file.file_name().unwrap());
-                    println!("{}", TreeFmt(&tree));
-                },
-                Err(e) => println!("{}", e),
+        load_tree_from(&file, true, |tree| match tree {
+            Ok(tree) => {
+                println!("{:?}", file.file_name().unwrap());
+                println!("{}", TreeFmt(&tree));
             }
+            Err(e) => println!("{}", e),
         });
     }
 }
