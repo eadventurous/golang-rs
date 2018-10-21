@@ -799,7 +799,7 @@ mod impls {
 
             // Step 1: find an initial pair.
             'outer: for (i, left) in rule.definitions.iter().enumerate() {
-                for (j, right) in rule.definitions.iter().enumerate().skip(i + 1) {
+                for right in rule.definitions.iter().skip(i + 1) {
                     if left.is_empty() || right.is_empty() {
                         continue;
                     }
@@ -818,29 +818,76 @@ mod impls {
                 return None;
             }
 
-            let mut ys = vec![];
             // Step 2: find all definitions with this prefix
-            ys = rule
+            let ys = rule
                 .definitions
                 .iter()
                 .enumerate()
                 .filter(|(_, def)| def.first() == Some(first))
-                // .map(|(i, _)| i)
-                .collect();
+                .collect::<Vec<_>>();
 
             // Step 3: Iterate along `ys` to find longest common prefix
-//            loop {
-//                let mut length = len;
-//                for y in ys {
-//
-//                }
-//            }
-            None
+            'end: for i in 1.. {
+                // first definitions'
+                let this = match &ys[0].1.iter().nth(i) {
+                    Some(left) => *left,
+                    None => break,
+                };
+                for (_, def) in ys.iter().skip(1) {
+                    match def.iter().nth(i) {
+                        Some(other) if this == other => {},
+                        _ => break 'end,
+                    };
+                }
+                len = i + 1;
+            }
+            let ys = ys.into_iter().map(|(y, _)| y).collect();
+            Some((ys, len))
         }
+
+        fn factor_out(&self, syntax: &mut Syntax, (x, ys, z): (usize, Vec<usize>, usize)) {
+            assert!(ys.len() >= 2);
+            assert!(z > 0);
+            // Get rule at index `x`.
+            // Collapse definitions references by indices `ys` into one definition.
+            // It will start with prefix of length `z`, followed by new rule's identifier.
+            let mut old_rule = syntax.rules[x].clone();
+            let mut old_rule_factored = Rule::new(&old_rule.name, DefinitionList(vec![]));
+
+            // Only copy back definitions not mentioned in `ys` list.
+            for (i, def) in old_rule.definitions.iter().enumerate() {
+                if !ys.contains(&i) {
+                    old_rule_factored.definitions.push(def.clone());
+                }
+            }
+            // Take random definition and extract its prefix.
+            let mut prefix = Definition(old_rule.definitions[ys[0]][..z].to_vec());
+
+            // TODO: Epsilon
+            let idx = syntax.add_rule();
+            {
+                // mut borrow scope
+                let new_rule = &mut syntax.rules[idx];
+                let new_name = new_rule.name.clone();
+                for y in ys {
+                    let mut def = &mut old_rule.definitions[y];
+                    def.splice(..z, vec![]).for_each(drop);
+                    new_rule.definitions.push(def.clone())
+                }
+                // finish with factored rule
+                prefix.push(Primary::NonTerminal(new_name.clone()));
+                old_rule_factored.definitions.push(prefix);
+            }
+            syntax.rules[x] = old_rule_factored;
+        }
+
     }
 
     impl SyntaxPass for LeftFactoringPass {
         fn pass(&mut self, syntax: &mut Syntax) -> Result<(), Box<Error>> {
+            while let Some((x, ys, z)) = self.find_common_factor(syntax) {
+                self.factor_out(syntax, (x, ys, z));
+            }
             Ok(())
         }
     }
@@ -1288,5 +1335,27 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn test_left_factor_pass() {
+        let source = r#" <A> ::= <X> | <X> <Y> <Z> ; "#;
+        let mut syntax = bnf(source, Recursion::Left);
+
+        assert_eq!(syntax.rules.len(), 1);
+        LeftFactoringPass::new().pass(&mut syntax).unwrap();
+
+        assert_eq!(syntax.rules.len(), 2);
+    }
+
+    #[test]
+    fn test_left_factor_pass_2() {
+        let source = r#" <S> ::= "b" |  | "b" "a" | "a" ; "#;
+        let mut syntax = bnf(source, Recursion::Left);
+
+        assert_eq!(syntax.rules.len(), 1);
+        LeftFactoringPass::new().pass(&mut syntax).unwrap();
+
+        println!("{}", syntax);
     }
 }
