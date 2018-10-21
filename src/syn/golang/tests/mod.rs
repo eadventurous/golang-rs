@@ -19,20 +19,20 @@ fn files(dir: &str) -> impl Iterator<Item = PathBuf> {
 /// # Returns
 ///
 /// Source code and result building its parsing tree.
-fn load_tree_from<P, F>(path: P, f: F)
+fn load_tree_from<P, F>(path: P, verbose: bool, f: F)
 where
     P: AsRef<Path>,
     F: FnOnce(Result<Tree<String>, ErrorBytes>) -> (),
 {
     let code = ::std::fs::read_to_string(path.as_ref()).unwrap();
-    let tree = build_tree(&code, path.as_ref().to_str().unwrap().to_owned(), false);
+    let tree = build_tree(&code, path.as_ref().to_str().unwrap().to_owned(), verbose);
     f(tree);
 }
 
 #[test]
 fn test_ok() {
     for file in files("ok") {
-        load_tree_from(&file, |tree| {
+        load_tree_from(&file, false, |tree| {
             assert!(
                 tree.is_ok(),
                 "File {:?} must be Ok:\n{}",
@@ -46,7 +46,7 @@ fn test_ok() {
 #[test]
 fn test_err() {
     for file in files("err") {
-        load_tree_from(&file, |tree| {
+        load_tree_from(&file, false, |tree| {
             assert!(
                 tree.is_err(),
                 "File {:?} must be Err:\n{}",
@@ -65,7 +65,7 @@ fn print_tree() {
         .into_iter()
         .map(|filename| base().join("ok").join(filename))
     {
-        load_tree_from(&file, |tree| {
+        load_tree_from(&file, true, |tree| {
             println!("{:?}", file.file_name().unwrap());
             println!("{}", TreeFmt(&tree.unwrap()));
         });
