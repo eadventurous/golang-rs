@@ -535,7 +535,7 @@ mod test {
         let mut ebnf = ebnf::Parser::new(grammar, "wiki/LL_parser".into())
             .parse()
             .unwrap();
-        let bnf = ebnf.ebnf_to_bnf(ebnf::Recursion::Right);
+        let bnf = ebnf.expand_into_bnf(ebnf::Recursion::Right);
 
         let _ll1 = Table::ll1(&bnf, "S").expect("Grammar is not LL(1)");
 
@@ -558,7 +558,7 @@ mod test {
         let mut ebnf = ebnf::Parser::new(grammar, filename.into())
             .parse()
             .unwrap();
-        let bnf = ebnf.ebnf_to_bnf(ebnf::Recursion::Right);
+        let bnf = ebnf.expand_into_bnf(ebnf::Recursion::Right);
 
         let t = Table::ll1(&bnf, "S");
         match t {

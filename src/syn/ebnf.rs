@@ -100,16 +100,16 @@ mod impls {
         }
 
         /// 2-in-1: `expand_ebnf` and `into_bnf` working together.
-        pub fn ebnf_to_bnf(&mut self, recursion: Recursion) -> bnf::Grammar {
+        pub fn expand_into_bnf(&mut self, recursion: Recursion) -> bnf::Grammar {
             EbnfExpansionPass::new(recursion).pass(self);
-            self.into_bnf().unwrap()
+            self.to_bnf().unwrap()
         }
 
         /// Downgrade EBNF syntax to BNF.
         ///
         /// This does not try to rewrite existing rules to eliminate nesting.
         /// To do that, `expand_ebnf` first.
-        pub fn into_bnf(&self) -> Result<bnf::Grammar, ()> {
+        pub fn to_bnf(&self) -> Result<bnf::Grammar, ()> {
             let mut bnf = bnf::Grammar::new();
 
             for rule in &self.rules {

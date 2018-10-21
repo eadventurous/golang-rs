@@ -51,7 +51,7 @@ fn main_2() {
         Ok(ref syntax) => {
             let mut left = syntax.clone();
             left.expand_ebnf(syn::ebnf::Recursion::Left);
-            let bnf = left.into_bnf().unwrap();
+            let bnf = left.to_bnf().unwrap();
             println!("Left {}", left);
             println!("Left BNF {:#?}", bnf);
 

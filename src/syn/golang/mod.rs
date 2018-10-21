@@ -21,7 +21,7 @@ pub fn ebnf() -> Syntax {
 }
 
 pub fn bnf(ebnf: &mut Syntax) -> Grammar {
-    ebnf.ebnf_to_bnf(ebnf::Recursion::Right)
+    ebnf.expand_into_bnf(ebnf::Recursion::Right)
 }
 
 pub fn build_tree(
