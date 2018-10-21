@@ -221,31 +221,31 @@ pub fn make_lexer<'a>() -> Lexer<'a, GoToken<'a>> {
         .add(r"//([^\n]*)\n?", |c| Comment(c.get(1).unwrap().as_str()))
         .add(r"(?s)/\*(.*?)\*/", |c| Comment(c.get(1).unwrap().as_str()))
         // ...
-        .add(r"break", constant!(Keyword(GoKeyword::Break)))
-        .add(r"case", constant!(Keyword(GoKeyword::Case)))
-        .add(r"defer", constant!(Keyword(GoKeyword::Chan)))
-        .add(r"else", constant!(Keyword(GoKeyword::Const)))
-        .add(r"continue", constant!(Keyword(GoKeyword::Continue)))
-        .add(r"default", constant!(Keyword(GoKeyword::Default)))
-        .add(r"defer", constant!(Keyword(GoKeyword::Defer)))
-        .add(r"else", constant!(Keyword(GoKeyword::Else)))
-        .add(r"fallthroug", constant!(Keyword(GoKeyword::Fallthrough)))
-        .add(r"for", constant!(Keyword(GoKeyword::For)))
-        .add(r"func", constant!(Keyword(GoKeyword::Func)))
-        .add(r"go", constant!(Keyword(GoKeyword::Go)))
-        .add(r"goto", constant!(Keyword(GoKeyword::Goto)))
-        .add(r"if", constant!(Keyword(GoKeyword::If)))
-        .add(r"import", constant!(Keyword(GoKeyword::Import)))
-        .add(r"interface", constant!(Keyword(GoKeyword::Interface)))
-        .add(r"map", constant!(Keyword(GoKeyword::Map)))
-        .add(r"package", constant!(Keyword(GoKeyword::Package)))
-        .add(r"range", constant!(Keyword(GoKeyword::Range)))
-        .add(r"return", constant!(Keyword(GoKeyword::Return)))
-        .add(r"select", constant!(Keyword(GoKeyword::Select)))
-        .add(r"struct", constant!(Keyword(GoKeyword::Struct)))
-        .add(r"switch", constant!(Keyword(GoKeyword::Switch)))
-        .add(r"type", constant!(Keyword(GoKeyword::Type)))
-        .add(r"var", constant!(Keyword(GoKeyword::Var)))
+        .add(r"break\b", constant!(Keyword(GoKeyword::Break)))
+        .add(r"case\b", constant!(Keyword(GoKeyword::Case)))
+        .add(r"defer\b", constant!(Keyword(GoKeyword::Chan)))
+        .add(r"else\b", constant!(Keyword(GoKeyword::Const)))
+        .add(r"continue\b", constant!(Keyword(GoKeyword::Continue)))
+        .add(r"default\b", constant!(Keyword(GoKeyword::Default)))
+        .add(r"defer\b", constant!(Keyword(GoKeyword::Defer)))
+        .add(r"else\b", constant!(Keyword(GoKeyword::Else)))
+        .add(r"fallthroug\b", constant!(Keyword(GoKeyword::Fallthrough)))
+        .add(r"for\b", constant!(Keyword(GoKeyword::For)))
+        .add(r"func\b", constant!(Keyword(GoKeyword::Func)))
+        .add(r"go\b", constant!(Keyword(GoKeyword::Go)))
+        .add(r"goto\b", constant!(Keyword(GoKeyword::Goto)))
+        .add(r"if\b", constant!(Keyword(GoKeyword::If)))
+        .add(r"import\b", constant!(Keyword(GoKeyword::Import)))
+        .add(r"interface\b", constant!(Keyword(GoKeyword::Interface)))
+        .add(r"map\b", constant!(Keyword(GoKeyword::Map)))
+        .add(r"package\b", constant!(Keyword(GoKeyword::Package)))
+        .add(r"range\b", constant!(Keyword(GoKeyword::Range)))
+        .add(r"return\b", constant!(Keyword(GoKeyword::Return)))
+        .add(r"select\b", constant!(Keyword(GoKeyword::Select)))
+        .add(r"struct\b", constant!(Keyword(GoKeyword::Struct)))
+        .add(r"switch\b", constant!(Keyword(GoKeyword::Switch)))
+        .add(r"type\b", constant!(Keyword(GoKeyword::Type)))
+        .add(r"var\b", constant!(Keyword(GoKeyword::Var)))
         // ...
         .add(
             r"[[:digit:]]+\.[[:digit:]]*((e|E)(\+|-)?[[:digit:]]*)?i",
@@ -666,10 +666,17 @@ mod test {
             r"__var__",
             r"e",
             r"i",
+
+            r"vars", // legal: starts with keyword substring
+            r"ifelse",
         ];
         let illegal_id = [
             r"6a", // illegal: can't start with digit
             r".a", // illegal: can't start with dot
+
+            r"if", // illegal: is a keyword
+            r"var",
+
         ];
         for id in valid_id.into_iter() {
             assert_eq!(token(next(&lexer, id)), GoToken::Ident(&id));
